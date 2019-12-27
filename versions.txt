@@ -1,0 +1,5 @@
+LastEmperor versions:
+
+- 1.0
+  - Initial release
+  - From Sapeli 1.67
