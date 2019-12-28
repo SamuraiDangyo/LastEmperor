@@ -1,7 +1,7 @@
 ## LastEmperor
 a Chess960 move generator (Derived from Sapeli 1.67)
 
-![LastEmperor](https://raw.githubusercontent.com/SamuraiDangyo/LastEmperor/master/logo.jpg?token=AL35PS2D4KZBUSMWP4WEPLC6A4SIA)
+![LastEmperor](https://github.com/SamuraiDangyo/LastEmperor/blob/master/logo.jpg)
 
 ### Install
 ```make install```
