@@ -1420,7 +1420,7 @@ static void Print_help()
   P(SHORT_LICENSE);
   printf("\n");
   P("Usage: lastemperor [COMMAND] [OPTION]?, ...");
-  P("> lastemperor -hash 1000 -perft 6 # Set 1024 MB hash and run perft");
+  P("> lastemperor -hash 1024 -perft 6 # Set 1024 MB hash and run perft");
   printf("\n");
   P("## LastEmperor Commands ##");
   P("-h(elp)         This help");
@@ -1456,6 +1456,10 @@ static void Command_setfen()
 
 static void Cli_commands()
 {
+  if (TOKENS_N < 2) {
+    Print_help();
+    exit(EXIT_SUCCESS);
+  }
   Token_expect(";");
   while (Token_ok()) {
     if (Token_next("h") || Token_next("help"))
