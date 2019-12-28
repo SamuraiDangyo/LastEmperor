@@ -1469,7 +1469,7 @@ static void Cli_commands()
     else if (Token_next("fen"))
       Command_setfen();
     else if (Token_next("suite"))
-      Suite(Between(1, Token_next_int(), 6));
+      Suite(Between(1, Token_next_int(), 8));
     else if (Token_next("perft"))
       Perft_run(Max(1, Token_next_int()));
     else if (Token_next("hash"))
