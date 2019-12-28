@@ -39,9 +39,9 @@
 #define VERSION                  "1.0"
 #define AUTHOR                   "Toni Helminen"
 
-#define STARTPOS                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -"
+#define STARTPOS                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 #define MAX_MOVES                218
-#define MAX_TOKENS               1024
+#define MAX_TOKENS               32
 #define BITBOARD                 unsigned long long int
 #define MEGABYTE                 (1 << 20)
 #define WHITE                    (BRD->white[0] | BRD->white[1] | BRD->white[2] | BRD->white[3] | BRD->white[4] | BRD->white[5])
@@ -103,6 +103,7 @@ typedef struct {
 
 #include "fdec.h"
 #include "data.h"
+#include "perft.h"
 
 ///
 /// Search : Static ( global ) variables
@@ -1319,16 +1320,18 @@ static void Padding(const char *str, const int space)
 {
   int i;
   int len = space - strlen(str);
-  
+
   for (i = 0; i < len; i++)
     printf(" ");
   printf("%s", str);
 }
 
+#define PHEADER() P("depth          nodes           mnps           time")
+
 static void Perft_final_print(const int depth, const BITBOARD nodes, const BITBOARD ms)
 {
-  P("===");
-  P("depth        nodes         mnps        time");
+  P("\n===");
+  PHEADER();
   Perft_print(depth, nodes, ms);
 }
 
@@ -1337,10 +1340,10 @@ static void Perft_print(const int depth, const BITBOARD nodes, const BITBOARD ms
   static char str[32];
 
   sprintf(str, "%i", depth); Padding(str, 5);
-  sprintf(str, "%llu", nodes); Padding(str, 13);
-  sprintf(str, "%.3f", 0.000001f * DOUBLE(Nps(nodes, ms))); Padding(str, 13);
-  sprintf(str, "%.3f", 0.001f * DOUBLE(ms)); Padding(str, 13);
-  printf("\n");  
+  sprintf(str, "%llu", nodes); Padding(str, 15);
+  sprintf(str, "%.3f", 0.000001f * DOUBLE(Nps(nodes, ms))); Padding(str, 15);
+  sprintf(str, "%.3f", 0.001f * DOUBLE(ms)); Padding(str, 15);
+  printf("\n");
 }
 
 static void Perft_run(const int depth)
@@ -1350,12 +1353,12 @@ static void Perft_run(const int depth)
   BITBOARD totaltime = 0;
   BITBOARD allnodes = 0;
 
-  P("### Perft ( %i MB ) ###", MYHASH.size / (1 << 20));
+  P("### Perft ( %i MB ) ###", MYHASH.size / MEGABYTE);
   if (POSITION_FEN[0] == '\0')
     P("\n[ %s ]", STARTPOS);
   else
     P("\n[ %s ]", POSITION_FEN);
-  P("depth        nodes         mnps        time");
+  PHEADER();
   for (i = 0; i < depth + 1; i++) {
     start_time = Now();
     nodes = Perft(i);
@@ -1374,7 +1377,7 @@ static BITBOARD Suite_run(const int suite_i, const int depth)
   BITBOARD all_nodes = 0;
   const BITBOARD *counts = SUITE[suite_i].nodes;
 
-  P("depth        nodes         mnps        time");
+  PHEADER();
   for (i = 0; i < depth; i++) {
     start = Now();
     nodes = Perft(i);
@@ -1382,7 +1385,8 @@ static BITBOARD Suite_run(const int suite_i, const int depth)
     SUITE_TOTAL_TIME += diff;
     all_nodes += nodes;
     Perft_print(i, nodes, diff);
-    MYASSERT(nodes == counts[i])
+    // Depth 7 and 8 here
+    if (i <= 6) {MYASSERT(nodes == counts[i])}
   }
   return all_nodes;
 }
@@ -1393,7 +1397,7 @@ static void Suite(const int depth)
   BITBOARD nodes = 0;
 
   P("### Running Chess960 suite ( %i MB ) ###", MYHASH.size / MEGABYTE);
-  assert(depth >= 1 && depth <= 6);
+  assert(depth >= 1 && depth <= 8);
   SUITE_TOTAL_TIME = 0;
   while (1) {
     if ( ! SUITE[suite_i].nodes[0])
@@ -1424,7 +1428,7 @@ static void Print_help()
   P("-fen [FEN]      Set fen");
   P("-id             Verify that LastEmperor works!");
   P("-perft [1..]    Run perft position");
-  P("-suite [1..]    Run perft suite");
+  P("-suite [1..8]   Run perft suite");
   P("-hash N         Set hash in N MB");
   printf("\n");
   P("Full source code, please see: <https://github.com/SamuraiDangyo/LastEmperor/>");
@@ -1467,7 +1471,7 @@ static void Cli_commands()
     else if (Token_next("hash"))
       Hashtable_set_size(&MYHASH, Max(16, Token_next_int()));
     else if (Token_next("id"))
-      Suite(5);
+      Suite(3);
     Token_expect(";");
   }
 }

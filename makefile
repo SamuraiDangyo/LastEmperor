@@ -92,7 +92,7 @@ id: build
 
 # Perft suite
 suite: build
-	./$(EXE) -suite 3
+	./$(EXE) -suite 4
 
 # See help
 help: build
