@@ -3,13 +3,8 @@ a Chess960 move generator (Derived from Sapeli 1.67)
 
 ![LastEmperor](https://raw.githubusercontent.com/SamuraiDangyo/LastEmperor/master/logo.jpg?token=AL35PS2D4KZBUSMWP4WEPLC6A4SIA)
 
-### Background
-Just a move generator tool to bench all 960 Chess960 positions
-
 ### Install
-1. ```make install```
-2. ```lastemperor -id # Verify that LastEmperor works```
-3. ```lastemperor -suite 6 # perft all 960 positions!```
+```make install```
 
 ### Credits
 logo graphics
