@@ -1,12 +1,11 @@
 ##
-# LastEmperor, a Chess960 move generator
+# LastEmperor, a Chess960 move generator (Derived from Sapeli 1.67)
 # GNU General Public License version 3; for details see LICENSE
 ##
 
 ##
 # ~~~ Compile Flags ~~~
-#   -DNDEBUG          No debug. Much faster builds.
-#   -DABSOLUTE_SCORE  Forces absolute scores. Default is relative.
+#   -DNDEBUG   No debug. Much faster builds.
 ##
 
 ##
@@ -86,21 +85,21 @@ buildprofile: $(FILES) clean
 run: build
 	./$(EXE)
 
-# Verify that LastEmperor works
-id: build
-	./$(EXE) -id
+# Benchmarks
+bench: build
+	./$(EXE) -bench
 
-# Perft suite
+# Chess960 suite
 suite: build
 	./$(EXE) -suite 4
 
-# See help
+# Help
 help: build
 	./$(EXE) -help
 
 # Perft 
 perft: build
-	./$(EXE) -fen "8/2PPk3/8/8/7q/8/8/2K5 w - - 0 1" -perft 8
+	./$(EXE) -fen "k7/8/2N5/1N6/8/8/8/K6n w - -" -perft 8
 
 # gprof report
 gprof: clean

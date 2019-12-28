@@ -7,7 +7,7 @@
 
 // Copied from: https://www.chessprogramming.org/Chess960_Perft_Results
 static struct {
-  const char fen[256];
+  const char fen[128];
   const BITBOARD nodes[7];
 } SUITE[] = {
   {"bqnb1rkr/pp3ppp/3ppn2/2p5/5P2/P2P4/NPP1P1PP/BQ1BNRKR w HFhf - 2 9", {1, 21, 528, 12189, 326672, 8146062, 227689589}},

@@ -36,7 +36,7 @@
 ///
 
 #define NAME                     "LastEmperor"
-#define VERSION                  "1.0"
+#define VERSION                  "1.01"
 #define AUTHOR                   "Toni Helminen"
 
 #define STARTPOS                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -556,15 +556,18 @@ static void Assume_legal_position()
 
   // Only 1 king per side
   MYASSERT(POPCOUNT(BRD->white[5]) == 1 && POPCOUNT(BRD->black[5]) == 1)
+  // King can't be captured next
+  MYASSERT(WTM ? ( ! Checks_w()) : ( ! Checks_b()))
   // Kings on correct places
   MYASSERT(BRD->board[LSB(BRD->white[5])] == 6 && BRD->board[LSB(BRD->black[5])] == -6)
-  for (i = 0; i < 64; i++) { // Pieces where they should be
+  // Pieces where they should be
+  for (i = 0; i < 64; i++) {
     if (BRD->board[i] > 0) {
       MYASSERT((BRD->board[i] <= 6) && (BIT(i) & BRD->white[BRD->board[i] - 1]))
     } else if (BRD->board[i] < 0) {
       MYASSERT((BRD->board[i] >= -6) && (BIT(i) & BRD->black[-BRD->board[i] - 1]))
     } else {
-      MYASSERT(! (BIT(i) & BOTH))
+      MYASSERT( ! (BIT(i) & BOTH))
     }
   }
   // Check en passant validity
@@ -577,12 +580,10 @@ static void Assume_legal_position()
     }
   }
   // Make sure castling rooks are in correct place
-  MYASSERT((BRD->castle & 1) ? (X(ROOK_W[0]) >= X(KING_W) && BRD->board[ROOK_W[0]] == 4) : 1)
-  MYASSERT((BRD->castle & 2) ? (X(ROOK_W[1]) <= X(KING_W) && BRD->board[ROOK_W[1]] == 4) : 1)
-  MYASSERT((BRD->castle & 4) ? (X(ROOK_B[0]) >= X(KING_B) && BRD->board[ROOK_B[0]] == -4) : 1)
-  MYASSERT((BRD->castle & 8) ? (X(ROOK_B[1]) <= X(KING_B) && BRD->board[ROOK_B[1]] == -4) : 1)
-  // King can't be captured next
-  MYASSERT(WTM ? ( ! Checks_w()) : ( ! Checks_b()))
+  if (BRD->castle & 1) {MYASSERT(X(ROOK_W[0]) >= X(KING_W) && BRD->board[ROOK_W[0]] == 4)}
+  if (BRD->castle & 2) {MYASSERT(X(ROOK_W[1]) <= X(KING_W) && BRD->board[ROOK_W[1]] == 4)}
+  if (BRD->castle & 4) {MYASSERT(X(ROOK_B[0]) >= X(KING_B) && BRD->board[ROOK_B[0]] == -4)}
+  if (BRD->castle & 8) {MYASSERT(X(ROOK_B[1]) <= X(KING_B) && BRD->board[ROOK_B[1]] == -4)}
 }
 
 ///
@@ -882,7 +883,7 @@ static void Check_castle_rights_b()
 
 static void Handle_castle_rights()
 {
-  if ( ! BRD->castle) // Make LastEmperor castle ASAP for speedups
+  if ( ! BRD->castle)
     return;
   Check_castle_rights_w();
   Check_castle_rights_b();
@@ -1052,7 +1053,7 @@ static void Add_moves_b(const int from, BITBOARD moves)
   }
 }
 
-#define POP(/* Once you pop you can't stop */) pos = LSB(pieces); pieces &= pieces - 1
+#define POP(/* Once you pop, you can't stop */) pos = LSB(pieces); pieces &= pieces - 1
 
 static void Mgen_all_w()
 {
@@ -1098,7 +1099,7 @@ static void Mgen_all_w()
     POP();
     Add_moves_w(pos, ROOK_MOVES(pos, both) & good);
   }
-  // Kings
+  // King
   pos = LSB(BRD->white[5]);
   Add_moves_w(pos, KING_MOVES[pos] & good);
   Castling_moves_w(both);
@@ -1148,7 +1149,7 @@ static void Mgen_all_b()
     POP();
     Add_moves_b(pos, ROOK_MOVES(pos, both) & good);
   }
-  // Kings
+  // King
   pos = LSB(BRD->black[5]);
   Add_moves_b(pos, KING_MOVES[pos] & good);
   Castling_moves_b(both);
@@ -1198,44 +1199,38 @@ static BITBOARD Hash(const int wtm)
   return hash;
 }
 
-static void Hashtable_free_memory(HASHTABLE_T *table)
+static void Hashtable_free_memory()
 {
-  if (table->size > 0) {
-    free(table->array);
-    table->array = 0;
-    table->size = 0;
+  if (MYHASH.size > 0) {
+    free(MYHASH.array);
+    MYHASH.array = 0;
+    MYHASH.size = 0;
   }
 }
 
-static void Free_memory()
-{
-  Hashtable_free_memory(&MYHASH);
-}
-
-// Allocate memory for Hashtable ( Evals / Good Moves )
+// Allocate memory for Hashtable
 // -- The More The Better --
-// [16 MB, 1 PB]
-static void Hashtable_set_size(HASHTABLE_T *table, const int usize /* MB */)
+// [1 MB, 1 PB]
+static void Hashtable_set_size(const int usize /* MB */)
 {
   BITBOARD size = ULL(usize);
 
-  Hashtable_free_memory(table);
-  size = MAX(size, 16);
+  Hashtable_free_memory();
+  size = MAX(size, 1);
   size = MIN(size, 1024 * 1024); // 1 PB
-  size = (1 << 20) * size; // To MB
-  table->size = 1;
-  while (table->size <= size) // Calculate needed memory in bytes
-    table->size <<= 1;
-  table->size >>= 1;
-  table->count = INT(table->size / sizeof(HASHTABLE_ENTRY_T));
-  table->key = 1;
-  while (table->key <= table->count) // Create key according to count
-    table->key <<= 1;
-  table->key >>= 1;
-  //table->depth = 0;
-  table->key -= 1; // 1000b = 8d / - 1d / 0111b = 7d
-  table->array = (HASHTABLE_ENTRY_T*) calloc(table->count, sizeof(HASHTABLE_ENTRY_T)); // <- Cast for g++
-  MYASSERT(table->array != NULL) // Make sure there is enough space
+  size = MEGABYTE * size; // To MB
+  MYHASH.size = 1;
+  while (MYHASH.size <= size) // Calculate needed memory in bytes
+    MYHASH.size <<= 1;
+  MYHASH.size >>= 1;
+  MYHASH.count = INT(MYHASH.size / sizeof(HASHTABLE_ENTRY_T));
+  MYHASH.key = 1;
+  while (MYHASH.key <= MYHASH.count) // Create key according to count
+    MYHASH.key <<= 1;
+  MYHASH.key >>= 1;
+  MYHASH.key -= 1; // 1000b = 8d / - 1d / 0111b = 7d
+  MYHASH.array = (HASHTABLE_ENTRY_T*) calloc(MYHASH.count, sizeof(HASHTABLE_ENTRY_T)); // <- Cast for g++
+  MYASSERT(MYHASH.array != NULL) // Make sure there is enough space
 }
 
 ///
@@ -1262,6 +1257,7 @@ static void Add_perft(const BITBOARD hash, const BITBOARD nodes, const int depth
   entry->nodes = nodes;
 }
 
+// Bulk counting + hashing
 static BITBOARD Perft_w(const int depth)
 {
   int i, len;
@@ -1319,14 +1315,14 @@ static BITBOARD Perft(const int depth)
 static void Padding(const char *str, const int space)
 {
   int i;
-  int len = space - strlen(str);
+  const int len = space - strlen(str);
 
   for (i = 0; i < len; i++)
     printf(" ");
   printf("%s", str);
 }
 
-#define PHEADER() P("depth          nodes           mnps           time")
+#define PHEADER() P("depth           nodes            mnps            time")
 
 static void Perft_final_print(const int depth, const BITBOARD nodes, const BITBOARD ms)
 {
@@ -1340,9 +1336,9 @@ static void Perft_print(const int depth, const BITBOARD nodes, const BITBOARD ms
   static char str[32];
 
   sprintf(str, "%i", depth); Padding(str, 5);
-  sprintf(str, "%llu", nodes); Padding(str, 15);
-  sprintf(str, "%.3f", 0.000001f * DOUBLE(Nps(nodes, ms))); Padding(str, 15);
-  sprintf(str, "%.3f", 0.001f * DOUBLE(ms)); Padding(str, 15);
+  sprintf(str, "%llu", nodes); Padding(str, 16);
+  sprintf(str, "%.3f", 0.000001f * DOUBLE(Nps(nodes, ms))); Padding(str, 16);
+  sprintf(str, "%.3f", 0.001f * DOUBLE(ms)); Padding(str, 16);
   printf("\n");
 }
 
@@ -1385,7 +1381,7 @@ static BITBOARD Suite_run(const int suite_i, const int depth)
     SUITE_TOTAL_TIME += diff;
     all_nodes += nodes;
     Perft_print(i, nodes, diff);
-    // Depth 7 and 8 here
+    // Depths 7 and 8 here
     if (i <= 6) {MYASSERT(nodes == counts[i])}
   }
   return all_nodes;
@@ -1396,7 +1392,7 @@ static void Suite(const int depth)
   int suite_i = 0;
   BITBOARD nodes = 0;
 
-  P("### Running Chess960 suite ( %i MB ) ###", MYHASH.size / MEGABYTE);
+  P("### Chess960 suite ( %i MB ) ###", MYHASH.size / MEGABYTE);
   assert(depth >= 1 && depth <= 8);
   SUITE_TOTAL_TIME = 0;
   while (1) {
@@ -1426,9 +1422,9 @@ static void Print_help()
   P("-h(elp)         This help");
   P("-v(ersion)      Show Version");
   P("-fen [FEN]      Set fen");
-  P("-id             Verify that LastEmperor works!");
+  P("-bench          Run LastEmperor benchmarks");
   P("-perft [1..]    Run perft position");
-  P("-suite [1..8]   Run perft suite");
+  P("-suite [1..8]   Run Chess960 suite");
   P("-hash N         Set hash in N MB");
   printf("\n");
   P("Full source code, please see: <https://github.com/SamuraiDangyo/LastEmperor/>");
@@ -1454,6 +1450,12 @@ static void Command_setfen()
   Position_fen();
 }
 
+static void Command_bench()
+{
+  Fen("8/2PPk3/8/8/7q/8/8/2K5 w - - 0 1");
+  Perft_run(8);
+}
+
 static void Cli_commands()
 {
   if (TOKENS_N < 2) {
@@ -1472,10 +1474,10 @@ static void Cli_commands()
       Suite(Between(1, Token_next_int(), 8));
     else if (Token_next("perft"))
       Perft_run(Max(1, Token_next_int()));
+    else if (Token_next("bench"))
+      Command_bench();
     else if (Token_next("hash"))
-      Hashtable_set_size(&MYHASH, Max(16, Token_next_int()));
-    else if (Token_next("id"))
-      Suite(3);
+      Hashtable_set_size(Token_next_int());
     Token_expect(";");
   }
 }
@@ -1575,7 +1577,7 @@ static void Init_zobrist()
 
 static void Init_hash()
 {
-  Hashtable_set_size(&MYHASH, 256 /* MB */ ); // Default size
+  Hashtable_set_size(256 /* MB */ ); // Default size
 }
 
 static void Init()
@@ -1620,7 +1622,7 @@ static void Run()
 
 int main(int argc, char **argv)
 {
-  atexit(Free_memory); // No memory leaks
+  atexit(Hashtable_free_memory); // No memory leaks
   Init_tokens(argc, argv);
   Run();
   return EXIT_SUCCESS;

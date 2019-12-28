@@ -1,7 +1,7 @@
 #ifndef DATA_H
 #define DATA_H
 
-#define SHORT_LICENSE "GNU General Public License version 3; for details see 'lastemperor -license'"
+#define SHORT_LICENSE "GNU General Public License version 3; for details see LICENSE"
 
 ///
 /// BitBoard moves
