@@ -600,10 +600,11 @@ static bool Checks_castle_w(BITBOARD squares)
   while (squares) {
     pos = LSB(squares);
     squares &= squares - 1;
-    if ((KNIGHT_MOVES[pos] & BRD->white[1]) |
+    if (
+        (PAWN_CHECKS_B[pos] & BRD->white[0]) |
+        (KNIGHT_MOVES[pos] & BRD->white[1]) |
         (BISHOP_MOVES(pos, both) & bishop_plus_queen) |
         (ROOK_MOVES(pos, both) & rook_plus_queen) |
-        (PAWN_CHECKS_B[pos] & BRD->white[0]) |
         (KING_MOVES[pos] & BRD->white[5]))
       return 1;
   }
@@ -620,10 +621,11 @@ static bool Checks_castle_b(BITBOARD squares)
   while (squares) {
     pos = LSB(squares);
     squares &= squares - 1;
-    if ((KNIGHT_MOVES[pos] & BRD->black[1]) |
+    if (
+        (PAWN_CHECKS_W[pos] & BRD->black[0]) |
+        (KNIGHT_MOVES[pos] & BRD->black[1]) |
         (BISHOP_MOVES(pos, both) & bishop_plus_queen) |
         (ROOK_MOVES(pos, both) & rook_plus_queen) |
-        (PAWN_CHECKS_W[pos] & BRD->black[0]) |
         (KING_MOVES[pos] & BRD->black[5]))
       return 1;
   }
@@ -636,10 +638,10 @@ static bool Checks_w()
   const int king_i = LSB(BRD->black[5]);
 
   return (
-      (ROOK_MOVES(king_i, both) & (BRD->white[3] | BRD->white[4])) |
-      (BISHOP_MOVES(king_i, both) & (BRD->white[2] | BRD->white[4])) |
-      (KNIGHT_MOVES[king_i] & BRD->white[1]) |
       (PAWN_CHECKS_B[king_i] & BRD->white[0]) |
+      (KNIGHT_MOVES[king_i] & BRD->white[1]) |
+      (BISHOP_MOVES(king_i, both) & (BRD->white[2] | BRD->white[4])) |
+      (ROOK_MOVES(king_i, both) & (BRD->white[3] | BRD->white[4])) |
       (KING_MOVES[king_i] & BRD->white[5]));
 }
 
@@ -649,10 +651,10 @@ static bool Checks_b()
   const int king_i = LSB(BRD->white[5]);
 
   return (
-      (ROOK_MOVES(king_i, both) & (BRD->black[3] | BRD->black[4])) |
-      (BISHOP_MOVES(king_i, both) & (BRD->black[2] | BRD->black[4])) |
-      (KNIGHT_MOVES[king_i] & BRD->black[1]) |
       (PAWN_CHECKS_W[king_i] & BRD->black[0]) |
+      (KNIGHT_MOVES[king_i] & BRD->black[1]) |
+      (BISHOP_MOVES(king_i, both) & (BRD->black[2] | BRD->black[4])) |
+      (ROOK_MOVES(king_i, both) & (BRD->black[3] | BRD->black[4])) |
       (KING_MOVES[king_i] & BRD->black[5]));
 }
 
@@ -1059,26 +1061,24 @@ static void Mgen_all_w()
 {
   int pos;
   BITBOARD pieces;
-  const BITBOARD white = WHITE;
-  const BITBOARD black = BLACK;
-  const BITBOARD both  = white | black;
-  const BITBOARD empty = ~both;
-  const BITBOARD good  = ~white;
-  BITBOARD pawn_sq     = black;
+  const BITBOARD white   = WHITE;
+  const BITBOARD black   = BLACK;
+  const BITBOARD both    = white | black;
+  const BITBOARD empty   = ~both;
+  const BITBOARD good    = ~white;
+  const BITBOARD pawn_sq = BRD->ep > 0 ? (black | (BIT(BRD->ep) & 0x0000FF0000000000ULL)) : black;
 
   assert( ! Checks_w());
   // Pawns
-  if (BRD->ep >= 0)
-    pawn_sq |= BIT(BRD->ep) & 0x0000FF0000000000ULL;
   pieces = BRD->white[0];
   while (pieces) {
     POP();
     Add_moves_w(pos, PAWN_CHECKS_W[pos] & pawn_sq);
     if (Y(pos) == 1) {
-      if (PAWN_MOVES_W[pos] & empty)
+      if (PAWN_MOVES_1_W[pos] & empty)
         Add_moves_w(pos, PAWN_MOVES_2_W[pos] & empty);
     } else {
-      Add_moves_w(pos, PAWN_MOVES_W[pos] & empty);
+      Add_moves_w(pos, PAWN_MOVES_1_W[pos] & empty);
     }
   }
   // Knights
@@ -1109,26 +1109,24 @@ static void Mgen_all_b()
 {
   int pos;
   BITBOARD pieces;
-  const BITBOARD white = WHITE;
-  const BITBOARD black = BLACK;
-  const BITBOARD both  = white | black;
-  const BITBOARD empty = ~both;
-  const BITBOARD good  = ~black;
-  BITBOARD pawn_sq     = white;
+  const BITBOARD white   = WHITE;
+  const BITBOARD black   = BLACK;
+  const BITBOARD both    = white | black;
+  const BITBOARD empty   = ~both;
+  const BITBOARD good    = ~black;
+  const BITBOARD pawn_sq = BRD->ep > 0 ? white | (BIT(BRD->ep) & 0x0000000000FF0000ULL) : white;
 
   assert( ! Checks_b());
   // Pawns
-  if (BRD->ep >= 0)
-    pawn_sq |= BIT(BRD->ep) & 0x0000000000FF0000ULL;
   pieces = BRD->black[0];
   while (pieces) {
     POP();
     Add_moves_b(pos, PAWN_CHECKS_B[pos] & pawn_sq);
     if (Y(pos) == 6) {
-      if (PAWN_MOVES_B[pos] & empty)
+      if (PAWN_MOVES_1_B[pos] & empty)
         Add_moves_b(pos, PAWN_MOVES_2_B[pos] & empty);
     } else {
-      Add_moves_b(pos, PAWN_MOVES_B[pos] & empty);
+      Add_moves_b(pos, PAWN_MOVES_1_B[pos] & empty);
     }
   }
   // Knights

@@ -677,7 +677,7 @@ static const BITBOARD ROOK_MOVE_MAGICS[64] = {
   0x7e80808080808000ULL
 };
 
-static const BITBOARD PAWN_MOVES_W[64] = {
+static const BITBOARD PAWN_MOVES_1_W[64] = {
   0x100ULL,
   0x200ULL,
   0x400ULL,
@@ -744,7 +744,7 @@ static const BITBOARD PAWN_MOVES_W[64] = {
   0
 };
 
-static const BITBOARD PAWN_MOVES_B[64] = {
+static const BITBOARD PAWN_MOVES_1_B[64] = {
   0,
   0,
   0,
