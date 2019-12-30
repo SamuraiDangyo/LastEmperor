@@ -6,3 +6,6 @@ LastEmperor versions:
 
 - 1.01
   - fixes
+
+- 1.02
+  - more fixes

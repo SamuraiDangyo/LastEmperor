@@ -36,7 +36,7 @@
 ///
 
 #define NAME                     "LastEmperor"
-#define VERSION                  "1.01"
+#define VERSION                  "1.02"
 #define AUTHOR                   "Toni Helminen"
 
 #define STARTPOS                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -64,10 +64,11 @@
 #define LSB(b)                   __builtin_ctzll(b)
 #define POPCOUNT(b)              __builtin_popcountll(b)
 #define MYASSERT(test)           if ( ! (test)) {P("LastEmperor error: Line: %i", __LINE__); exit(EXIT_FAILURE);}
-#define BISHOP_MAGIC_INDEX(i, a) ((((a) & BISHOP_MASK[(i)]) * BISHOP_MAGIC[(i)]) >> 55)
-#define ROOK_MAGIC_INDEX(i, a)   ((((a) & ROOK_MASK[(i)]) * ROOK_MAGIC[(i)]) >> 52)
-#define BISHOP_MOVES(i, a)       BISHOP_MAGIC_MOVES[(i)][BISHOP_MAGIC_INDEX((i), (a))]
-#define ROOK_MOVES(i, a)         ROOK_MAGIC_MOVES[(i)][ROOK_MAGIC_INDEX((i), (a))]
+
+#define BISHOP_MAGIC_INDEX(i, m) ((((m) & BISHOP_MASK[(i)]) * BISHOP_MAGIC[(i)]) >> 55)
+#define ROOK_MAGIC_INDEX(i, m)   ((((m) & ROOK_MASK[(i)]) * ROOK_MAGIC[(i)]) >> 52)
+#define BISHOP_MOVES(i, m)       BISHOP_MAGIC_MOVES[(i)][BISHOP_MAGIC_INDEX((i), (m))]
+#define ROOK_MOVES(i, m)         ROOK_MAGIC_MOVES[(i)][ROOK_MAGIC_INDEX((i), (m))]
 
 ///
 /// Structs
@@ -88,14 +89,14 @@ typedef struct {
   BITBOARD hash;
   BITBOARD nodes;
   int depth;
-} HASHTABLE_ENTRY_T;
+} HASH_ENTRY_T;
 
 typedef struct {
-  HASHTABLE_ENTRY_T *array;
+  HASH_ENTRY_T *array;
   BITBOARD size; // Size in bytes
   int count;     // Number of entries
   int key;       // Hash key
-} HASHTABLE_T;
+} HASH_T;
 
 ///
 /// LastEmperor headers
@@ -109,7 +110,7 @@ typedef struct {
 /// Search : Static ( global ) variables
 ///
 
-static HASHTABLE_T MYHASH = {0};
+static HASH_T MYHASH = {0};
 static BOARD_T *MOVES = 0;
 static int MOVES_N = 0;
 
@@ -1221,13 +1222,13 @@ static void Hashtable_set_size(const int usize /* MB */)
   while (MYHASH.size <= size) // Calculate needed memory in bytes
     MYHASH.size <<= 1;
   MYHASH.size >>= 1;
-  MYHASH.count = INT(MYHASH.size / sizeof(HASHTABLE_ENTRY_T));
+  MYHASH.count = INT(MYHASH.size / sizeof(HASH_ENTRY_T));
   MYHASH.key = 1;
   while (MYHASH.key <= MYHASH.count) // Create key according to count
     MYHASH.key <<= 1;
   MYHASH.key >>= 1;
   MYHASH.key -= 1; // 1000b = 8d / - 1d / 0111b = 7d
-  MYHASH.array = (HASHTABLE_ENTRY_T*) calloc(MYHASH.count, sizeof(HASHTABLE_ENTRY_T)); // <- Cast for g++
+  MYHASH.array = (HASH_ENTRY_T*) calloc(MYHASH.count, sizeof(HASH_ENTRY_T)); // <- Cast for g++
   MYASSERT(MYHASH.array != NULL) // Make sure there is enough space
 }
 
@@ -1237,7 +1238,7 @@ static void Hashtable_set_size(const int usize /* MB */)
 
 static BITBOARD Get_perft(const BITBOARD hash, const int depth)
 {
-  const HASHTABLE_ENTRY_T *entry = &MYHASH.array[INT(hash & MYHASH.key)];
+  const HASH_ENTRY_T *entry = &MYHASH.array[INT(hash & MYHASH.key)];
 
   if (entry->hash == hash && entry->depth == depth)
     return entry->nodes;
@@ -1246,7 +1247,7 @@ static BITBOARD Get_perft(const BITBOARD hash, const int depth)
 
 static void Add_perft(const BITBOARD hash, const BITBOARD nodes, const int depth)
 {
-  HASHTABLE_ENTRY_T *entry = &MYHASH.array[INT(hash & MYHASH.key)];
+  HASH_ENTRY_T *entry = &MYHASH.array[INT(hash & MYHASH.key)];
 
   if ( ! nodes || (entry->hash == hash && entry->nodes > nodes))
     return;
@@ -1322,18 +1323,18 @@ static void Padding(const char *str, const int space)
 
 #define PHEADER() P("depth           nodes            mnps            time")
 
-static void Perft_final_print(const int depth, const BITBOARD nodes, const BITBOARD ms)
+static void Perft_final_print(const BITBOARD nodes, const BITBOARD ms)
 {
-  P("\n===");
-  PHEADER();
-  Perft_print(depth, nodes, ms);
+  P("===");
+  //PHEADER();
+  Perft_print(-1, nodes, ms);
 }
 
 static void Perft_print(const int depth, const BITBOARD nodes, const BITBOARD ms)
 {
   static char str[32];
 
-  sprintf(str, "%i", depth); Padding(str, 5);
+  if (depth < 0) {printf("     ");} else {sprintf(str, "%i", depth); Padding(str, 5);}
   sprintf(str, "%llu", nodes); Padding(str, 16);
   sprintf(str, "%.3f", 0.000001f * DOUBLE(Nps(nodes, ms))); Padding(str, 16);
   sprintf(str, "%.3f", 0.001f * DOUBLE(ms)); Padding(str, 16);
@@ -1352,6 +1353,7 @@ static void Perft_run(const int depth)
     P("\n[ %s ]", STARTPOS);
   else
     P("\n[ %s ]", POSITION_FEN);
+  //P("\n[ %s ]", POSITION_FEN);
   PHEADER();
   for (i = 0; i < depth + 1; i++) {
     start_time = Now();
@@ -1361,7 +1363,7 @@ static void Perft_run(const int depth)
     allnodes += nodes;
     Perft_print(i, nodes, diff_time);
   }
-  Perft_final_print(depth, allnodes, totaltime);
+  Perft_final_print(allnodes, totaltime);
 }
 
 static BITBOARD Suite_run(const int suite_i, const int depth)
@@ -1401,7 +1403,8 @@ static void Suite(const int depth)
     nodes += Suite_run(suite_i, depth + 1);
     suite_i++;
   }
-  Perft_final_print(depth, nodes, SUITE_TOTAL_TIME);
+  printf("\n");
+  Perft_final_print(nodes, SUITE_TOTAL_TIME);
 }
 
 ///
@@ -1450,8 +1453,8 @@ static void Command_setfen()
 
 static void Command_bench()
 {
-  Fen("8/2PPk3/8/8/7q/8/8/2K5 w - - 0 1");
-  Perft_run(8);
+  Fen(STARTPOS);
+  Perft_run(6);
 }
 
 static void Cli_commands()
