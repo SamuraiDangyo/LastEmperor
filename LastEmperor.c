@@ -1325,8 +1325,7 @@ static void Padding(const char *str, const int space)
 
 static void Perft_final_print(const BITBOARD nodes, const BITBOARD ms)
 {
-  P("===");
-  //PHEADER();
+  P("\n===");
   Perft_print(-1, nodes, ms);
 }
 
@@ -1403,7 +1402,6 @@ static void Suite(const int depth)
     nodes += Suite_run(suite_i, depth + 1);
     suite_i++;
   }
-  printf("\n");
   Perft_final_print(nodes, SUITE_TOTAL_TIME);
 }
 
