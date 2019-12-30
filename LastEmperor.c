@@ -1414,8 +1414,8 @@ static void Print_help()
   P("%s %s by %s", NAME, VERSION, AUTHOR);
   P(SHORT_LICENSE);
   printf("\n");
-  P("Usage: lastemperor [COMMAND] [OPTION]?, ...");
-  P("> lastemperor -hash 1024 -perft 6 # Set 1024 MB hash and run perft");
+  P("Usage: lastemperor [COMMAND] [OPTION]? ...");
+  P("> lastemperor -hash 512 -perft 6 # Set 512 MB hash and run perft");
   printf("\n");
   P("## LastEmperor Commands ##");
   P("-h(elp)         This help");
