@@ -61,8 +61,8 @@
 #define ULL(a)                   ((BITBOARD) (a))
 #define RESET(a)                 memset((a), 0, sizeof((a)))
 #define BIT(a)                   (0x1ULL << (a))
-#define LSB(b)                   __builtin_ctzll(b)
-#define POPCOUNT(b)              __builtin_popcountll(b)
+#define LSB(b)                   (__builtin_ctzll(b))
+#define POPCOUNT(b)              (__builtin_popcountll(b))
 #define MYASSERT(test)           if ( ! (test)) {P("LastEmperor error: Line: %i", __LINE__); exit(EXIT_FAILURE);}
 
 #define BISHOP_MAGIC_INDEX(i, m) ((((m) & BISHOP_MASK[(i)]) * BISHOP_MAGIC[(i)]) >> 55)
