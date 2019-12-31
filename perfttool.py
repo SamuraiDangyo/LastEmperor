@@ -16,6 +16,6 @@ for line in fin:
   lst = "{\"%s\", { 1,%s}}, " %(lst[0], line[len(lst[0]) + 1 : len(line) - 1])
   print(lst)
   array.append(line)
-	
+
 #print(array)
 fin.close()

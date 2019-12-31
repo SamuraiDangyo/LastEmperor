@@ -36,7 +36,7 @@
 ///
 
 #define NAME                     "LastEmperor"
-#define VERSION                  "1.03"
+#define VERSION                  "1.04"
 #define AUTHOR                   "Toni Helminen"
 
 #define STARTPOS                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
