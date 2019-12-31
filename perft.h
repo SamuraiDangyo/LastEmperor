@@ -5,9 +5,9 @@
 /// Perft
 ///
 
-static const PERFT_T PERFT_SUITE[2 * 960] = {
+static const PERFT_T PERFT_SUITE[1 * 960] = {
 
-  // Chess960 starting positions
+  // All 960 Chess960 starting positions
   {"rkqrbbnn/pppppppp/8/8/8/8/PPPPPPPP/RKQRBBNN w DAda - 0 1", {1, 19, 361, 7678, 162755, 3871700, 91540671}},
   {"rkqrbnnb/pppppppp/8/8/8/8/PPPPPPPP/RKQRBNNB w DAda - 0 1", {1, 20, 400, 8838, 194525, 4738058, 114586864}},
   {"rkqrnbbn/pppppppp/8/8/8/8/PPPPPPPP/RKQRNBBN w DAda - 0 1", {1, 19, 361, 7782, 166301, 3956472, 93289372}},
