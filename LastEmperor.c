@@ -36,7 +36,7 @@
 ///
 
 #define NAME                     "LastEmperor"
-#define VERSION                  "1.02"
+#define VERSION                  "1.03"
 #define AUTHOR                   "Toni Helminen"
 
 #define STARTPOS                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -98,6 +98,11 @@ typedef struct {
   int key;       // Hash key
 } HASH_T;
 
+typedef struct {
+  const char fen[100];
+  const BITBOARD nodes[7];
+} PERFT_T;
+
 ///
 /// LastEmperor headers
 ///
@@ -153,7 +158,7 @@ static BITBOARD ZOBRIST_WTM[2] = {0};
 ///
 
 static BITBOARD RANDOM_SEED = 131783;
-static BITBOARD SUITE_TOTAL_TIME = 0;
+static BITBOARD PERFT_SUITE_TOTAL_TIME = 0;
 static int TOKENS_N = 0;
 static int TOKENS_I = 0;
 static char POSITION_FEN[128] = {0};
@@ -171,11 +176,6 @@ static inline /* <- make me faster! */ int Max(const int a, const int b)
 static inline int Min(const int a, const int b)
 {
   return a < b ? a : b;
-}
-
-static int Between(const int a, const int b, const int c)
-{
-  return Max(a, Min(b, c));
 }
 
 static bool Equal_strings(const char *s1, const char *s2)
@@ -1352,7 +1352,6 @@ static void Perft_run(const int depth)
     P("\n[ %s ]", STARTPOS);
   else
     P("\n[ %s ]", POSITION_FEN);
-  //P("\n[ %s ]", POSITION_FEN);
   PHEADER();
   for (i = 0; i < depth + 1; i++) {
     start_time = Now();
@@ -1370,39 +1369,37 @@ static BITBOARD Suite_run(const int suite_i, const int depth)
   int i;
   BITBOARD start, diff, nodes;
   BITBOARD all_nodes = 0;
-  const BITBOARD *counts = SUITE[suite_i].nodes;
+  const BITBOARD *counts = PERFT_SUITE[suite_i].nodes;
 
   PHEADER();
   for (i = 0; i < depth; i++) {
     start = Now();
     nodes = Perft(i);
     diff = Now() - start;
-    SUITE_TOTAL_TIME += diff;
+    PERFT_SUITE_TOTAL_TIME += diff;
     all_nodes += nodes;
     Perft_print(i, nodes, diff);
-    // Depths 7 and 8 here
+    // Depths 7+ here
     if (i <= 6) {MYASSERT(nodes == counts[i])}
   }
   return all_nodes;
 }
 
-static void Suite(const int depth)
+static void Suite(const int depth, const bool suite)
 {
-  int suite_i = 0;
+  int i;
+  const int suite_i = suite ? 0 : 960;
   BITBOARD nodes = 0;
 
-  P("### Chess960 suite ( %i MB ) ###", MYHASH.size / MEGABYTE);
-  assert(depth >= 1 && depth <= 8);
-  SUITE_TOTAL_TIME = 0;
-  while (1) {
-    if ( ! SUITE[suite_i].nodes[0])
-      break;
-    Fen(SUITE[suite_i].fen);
-    P("\n[ %i: %s ]", suite_i + 1, SUITE[suite_i].fen);
-    nodes += Suite_run(suite_i, depth + 1);
-    suite_i++;
+  P("### Chess960 %s ( %i MB ) ###", suite ? "test suite" : "id test", MYHASH.size / MEGABYTE);
+  assert(depth >= 1);
+  PERFT_SUITE_TOTAL_TIME = 0;
+  for (i = 0; i < 960; i++) {
+    Fen(PERFT_SUITE[suite_i + i].fen);
+    P("\n[ %i: %s ]", i + 1, PERFT_SUITE[suite_i + i].fen);
+    nodes += Suite_run(suite_i + i, depth + 1);
   }
-  Perft_final_print(nodes, SUITE_TOTAL_TIME);
+  Perft_final_print(nodes, PERFT_SUITE_TOTAL_TIME);
 }
 
 ///
@@ -1422,8 +1419,9 @@ static void Print_help()
   P("-v(ersion)      Show Version");
   P("-fen [FEN]      Set fen");
   P("-bench          Run LastEmperor benchmarks");
+  P("-id             Run Chess960 id test");
   P("-perft [1..]    Run perft position");
-  P("-suite [1..8]   Run Chess960 suite");
+  P("-suite [1..]    Run Chess960 test suite");
   P("-hash N         Set hash in N MB");
   printf("\n");
   P("Full source code, please see: <https://github.com/SamuraiDangyo/LastEmperor/>");
@@ -1470,7 +1468,9 @@ static void Cli_commands()
     else if (Token_next("fen"))
       Command_setfen();
     else if (Token_next("suite"))
-      Suite(Between(1, Token_next_int(), 8));
+      Suite(Max(1, Token_next_int()), 1);
+    else if (Token_next("id"))
+      Suite(6, 0);
     else if (Token_next("perft"))
       Perft_run(Max(1, Token_next_int()));
     else if (Token_next("bench"))

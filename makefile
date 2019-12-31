@@ -89,9 +89,13 @@ run: build
 bench: build
 	./$(EXE) -bench
 
-# Chess960 suite
+# Chess960 test suite
 suite: build
-	./$(EXE) -suite 4
+	./$(EXE) -suite 5
+
+# Chess960 id test
+id: build
+	./$(EXE) -id
 
 # Help
 help: build
