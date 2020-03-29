@@ -5,7 +5,7 @@ a Chess960 move generator (Derived from Sapeli 1.67)
 
 ## Install
 ```
-make install
+make clean build-profile strip install
 ```
 
 ## Credits
