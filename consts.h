@@ -3,8 +3,8 @@ LastEmperor, a Chess960 move generator (Derived from Sapeli 1.67)
 Copyright (C) 2019 Toni Helminen
 */
 
-#ifndef DATA_H
-#define DATA_H
+#ifndef CONSTS_H_GUARD
+#define CONSTS_H_GUARD
 
 #define SHORT_LICENSE "GNU General Public License version 3; for details see LICENSE"
 
@@ -1151,4 +1151,4 @@ static const BITBOARD QUEEN_MOVES[64] = {
   0xffc0a09088848281ULL
 };
 
-#endif /* #ifndef DATA_H */
+#endif /* #ifndef CONSTS_H_GUARD */

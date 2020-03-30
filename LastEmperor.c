@@ -73,7 +73,7 @@ typedef struct {
   BITBOARD black[6];    // Black bitboards
   char board[64];       // Pieces
   BITBOARD hash;        // Hash of the position
-  char ep;              // En passant square
+  char epsq;            // En passant square
   unsigned char castle; // Castling rights
 } BOARD_T;
 
@@ -107,12 +107,6 @@ typedef struct {
 // Static ( global ) variables
 //
 
-// Search
-
-static HASH_T MYHASH                  = {0};
-static BOARD_T *MOVES                 = 0;
-static int MOVES_N                    = 0;
-
 // Board
 
 static const BOARD_T BRD_EMPTY        = {0};
@@ -123,6 +117,9 @@ static bool WTM                       = 0;
 
 // Move generator
 
+static HASH_T MYHASH                  = {0};
+static BOARD_T *MOVES                 = 0;
+static int MOVES_N                    = 0;
 static int KING_W                     = 0;
 static int KING_B                     = 0;
 static int ROOK_W[2]                  = {0};
@@ -454,9 +451,9 @@ static void Fen_KQkq(const char *fen)
 static void Fen_ep(const char *fen)
 {
   if (*fen == '-' || *fen == '\0' || *(fen + 1) == '\0') return;
-  BRD->ep = *fen - 'a';
+  BRD->epsq = *fen - 'a';
   fen++;
-  BRD->ep += 8 * (*fen - '1');
+  BRD->epsq += 8 * (*fen - '1');
 }
 
 static void Fen_split(const char *fen)
@@ -529,12 +526,12 @@ static void Fen_create(const char *fen)
 
 static void Fen(const char *fen)
 {
-  BRD_2   = BRD_EMPTY;
-  BRD     = &BRD_2;
-  WTM     = 1;
-  BRD->ep = -1;
-  KING_W  = 0;
-  KING_B  = 0;
+  BRD_2     = BRD_EMPTY;
+  BRD       = &BRD_2;
+  WTM       = 1;
+  BRD->epsq = -1;
+  KING_W    = 0;
+  KING_B    = 0;
 
   RESET(ROOK_W);
   RESET(ROOK_B);
@@ -568,9 +565,9 @@ static void Assume_legal_position(void)
   }
 
   // Check en passant validity
-  MYASSERT((BRD->ep >= -1 && BRD->ep <= 63));
-  if (BRD->ep != -1) {
-    if (WTM) MYASSERT((Y(BRD->ep) == 5)); else MYASSERT((Y(BRD->ep) == 2));
+  MYASSERT((BRD->epsq >= -1 && BRD->epsq <= 63));
+  if (BRD->epsq != -1) {
+    if (WTM) MYASSERT((Y(BRD->epsq) == 5)); else MYASSERT((Y(BRD->epsq) == 2));
   }
 
   // Make sure castling rooks are in correct places
@@ -687,7 +684,7 @@ static void Handle_castling_w(void)
 {
   MOVES[MOVES_N]  = *BRD;
   BRD             = &MOVES[MOVES_N];
-  BRD->ep         = -1;
+  BRD->epsq       = -1;
   BRD->castle    &= 4 | 8;
 }
 
@@ -710,8 +707,8 @@ static void Add_castle_O_O_w(void)
 
   BRD->hash ^= ZOBRIST_WTM[0]
                ^ ZOBRIST_WTM[1]
-               ^ ZOBRIST_EP[BRD_ORIGINAL->ep + 1]
-               ^ ZOBRIST_EP[BRD->ep + 1]
+               ^ ZOBRIST_EP[BRD_ORIGINAL->epsq + 1]
+               ^ ZOBRIST_EP[BRD->epsq + 1]
                ^ ZOBRIST_CASTLE[BRD_ORIGINAL->castle]
                ^ ZOBRIST_CASTLE[BRD->castle]
                ^ ZOBRIST_BOARD[6 + 6][KING_W]
@@ -740,8 +737,8 @@ static void Add_castle_O_O_O_w(void)
 
   BRD->hash ^= ZOBRIST_WTM[0]
                ^ ZOBRIST_WTM[1]
-               ^ ZOBRIST_EP[BRD_ORIGINAL->ep + 1]
-               ^ ZOBRIST_EP[BRD->ep + 1]
+               ^ ZOBRIST_EP[BRD_ORIGINAL->epsq + 1]
+               ^ ZOBRIST_EP[BRD->epsq + 1]
                ^ ZOBRIST_CASTLE[BRD_ORIGINAL->castle]
                ^ ZOBRIST_CASTLE[BRD->castle]
                ^ ZOBRIST_BOARD[6 + 6][KING_W]
@@ -761,7 +758,7 @@ static void Handle_castling_b(void)
 {
   MOVES[MOVES_N] = *BRD;
   BRD            = &MOVES[MOVES_N];
-  BRD->ep        = -1;
+  BRD->epsq      = -1;
   BRD->castle   &= 1 | 2;
 }
 
@@ -784,8 +781,8 @@ static void Add_castle_O_O_b(void)
 
   BRD->hash ^= ZOBRIST_WTM[0]
                ^ ZOBRIST_WTM[1]
-               ^ ZOBRIST_EP[BRD_ORIGINAL->ep + 1]
-               ^ ZOBRIST_EP[BRD->ep + 1]
+               ^ ZOBRIST_EP[BRD_ORIGINAL->epsq + 1]
+               ^ ZOBRIST_EP[BRD->epsq + 1]
                ^ ZOBRIST_CASTLE[BRD_ORIGINAL->castle]
                ^ ZOBRIST_CASTLE[BRD->castle]
                ^ ZOBRIST_BOARD[-6 + 6][KING_B]
@@ -814,8 +811,8 @@ static void Add_castle_O_O_O_b(void)
 
   BRD->hash ^= ZOBRIST_WTM[0]
                ^ ZOBRIST_WTM[1]
-               ^ ZOBRIST_EP[BRD_ORIGINAL->ep + 1]
-               ^ ZOBRIST_EP[BRD->ep + 1]
+               ^ ZOBRIST_EP[BRD_ORIGINAL->epsq + 1]
+               ^ ZOBRIST_EP[BRD->epsq + 1]
                ^ ZOBRIST_CASTLE[BRD_ORIGINAL->castle]
                ^ ZOBRIST_CASTLE[BRD->castle]
                ^ ZOBRIST_BOARD[-6 + 6][KING_B]
@@ -872,7 +869,7 @@ static bool Add_pawn_w(const int from, const int to)
     BRD->white[0]  ^= BIT(to);
     BRD->board[to]  = 5;
     BRD->white[4]  |= BIT(to);
-    BRD->hash      ^= ZOBRIST_EP[BRD->ep + 1] ^ ZOBRIST_BOARD[5 + 6][to];
+    BRD->hash      ^= ZOBRIST_EP[BRD->epsq + 1] ^ ZOBRIST_BOARD[5 + 6][to];
 
     if (Checks_b()) return 1;
 
@@ -886,12 +883,12 @@ static bool Add_pawn_w(const int from, const int to)
     Add_underpromotion_w(board, 3, to);
 
     return 1;
-  } else if (to == BRD_ORIGINAL->ep) {
+  } else if (to == BRD_ORIGINAL->epsq) {
     BRD->board[to - 8]  = 0;
     BRD->hash          ^= ZOBRIST_BOARD[-1 + 6][to - 8];
     BRD->black[0]      ^= BIT(to - 8);
   } else if (Y(from) == 1 && Y(to) == 3) {
-    BRD->ep = to - 8;
+    BRD->epsq = to - 8;
   }
   return 0;
 }
@@ -903,14 +900,14 @@ static void Add_w(const int from, const int to)
 
   MOVES[MOVES_N]     = *BRD;
   BRD                = &MOVES[MOVES_N];
-  BRD->ep            = -1;
+  BRD->epsq          = -1;
   BRD->board[to]     = me;
   BRD->board[from]   = 0;
   BRD->white[me - 1] = (BRD->white[me - 1] ^ BIT(from)) | BIT(to);
 
   BRD->hash ^= ZOBRIST_WTM[0]
                ^ ZOBRIST_WTM[1]
-               ^ ZOBRIST_EP[BRD_ORIGINAL->ep + 1]
+               ^ ZOBRIST_EP[BRD_ORIGINAL->epsq + 1]
                ^ ZOBRIST_CASTLE[BRD_ORIGINAL->castle]
                ^ ZOBRIST_BOARD[me + 6][from];
 
@@ -924,7 +921,7 @@ static void Add_w(const int from, const int to)
   Handle_castle_rights();
   BRD->hash ^= ZOBRIST_BOARD[me + 6][to]
                ^ ZOBRIST_CASTLE[BRD->castle]
-               ^ ZOBRIST_EP[BRD->ep + 1];
+               ^ ZOBRIST_EP[BRD->epsq + 1];
   MOVES_N++;
 }
 
@@ -948,7 +945,7 @@ static bool Add_pawn_b(const int from, const int to)
     BRD->black[0]  ^= BIT(to);
     BRD->board[to]  = -5;
     BRD->black[4]  |= BIT(to);
-    BRD->hash      ^= ZOBRIST_EP[BRD->ep + 1] ^ ZOBRIST_BOARD[-5 + 6][to];
+    BRD->hash      ^= ZOBRIST_EP[BRD->epsq + 1] ^ ZOBRIST_BOARD[-5 + 6][to];
 
     if (Checks_w()) return 1;
 
@@ -961,12 +958,12 @@ static bool Add_pawn_b(const int from, const int to)
     Add_underpromotion_b(board, -2, to);
     Add_underpromotion_b(board, -3, to);
     return 1;
-  } else if (to == BRD_ORIGINAL->ep) {
+  } else if (to == BRD_ORIGINAL->epsq) {
     BRD->board[to + 8]  = 0;
     BRD->hash          ^= ZOBRIST_BOARD[1 + 6][to + 8];
     BRD->white[0]      ^= BIT(to + 8);
   } else if (Y(from) == 6 && Y(to) == 4) {
-    BRD->ep = to + 8;
+    BRD->epsq = to + 8;
   }
   return 0;
 }
@@ -978,13 +975,13 @@ static void Add_b(const int from, const int to)
 
   MOVES[MOVES_N]       = *BRD;
   BRD                  = &MOVES[MOVES_N];
-  BRD->ep              = -1;
+  BRD->epsq            = -1;
   BRD->board[to]       = me;
   BRD->board[from]     = 0;
   BRD->black[-me - 1]  = (BRD->black[-me - 1] ^ BIT(from)) | BIT(to);
   BRD->hash           ^= ZOBRIST_WTM[0]
                          ^ ZOBRIST_WTM[1]
-                         ^ ZOBRIST_EP[BRD_ORIGINAL->ep + 1]
+                         ^ ZOBRIST_EP[BRD_ORIGINAL->epsq + 1]
                          ^ ZOBRIST_CASTLE[BRD_ORIGINAL->castle]
                          ^ ZOBRIST_BOARD[me + 6][from];
 
@@ -996,7 +993,7 @@ static void Add_b(const int from, const int to)
   if ((BRD->board[to] == -1 && Add_pawn_b(from, to)) || Checks_w()) return;
 
   Handle_castle_rights();
-  BRD->hash ^= ZOBRIST_BOARD[me + 6][to] ^ ZOBRIST_CASTLE[BRD->castle] ^ ZOBRIST_EP[BRD->ep + 1];
+  BRD->hash ^= ZOBRIST_BOARD[me + 6][to] ^ ZOBRIST_CASTLE[BRD->castle] ^ ZOBRIST_EP[BRD->epsq + 1];
   MOVES_N++;
 }
 
@@ -1049,7 +1046,7 @@ static void Mgen_all_w(void)
   const BITBOARD both    = white | black;
   const BITBOARD empty   = ~both;
   const BITBOARD good    = ~white;
-  const BITBOARD pawn_sq = BRD->ep > 0 ? (black | (BIT(BRD->ep) & 0x0000FF0000000000ULL)) : black;
+  const BITBOARD pawn_sq = BRD->epsq > 0 ? (black | (BIT(BRD->epsq) & 0x0000FF0000000000ULL)) : black;
 
   // Pawns
   pieces = BRD->white[0];
@@ -1087,7 +1084,7 @@ static void Mgen_all_b(void)
   const BITBOARD both    = white | black;
   const BITBOARD empty   = ~both;
   const BITBOARD good    = ~black;
-  const BITBOARD pawn_sq = BRD->ep > 0 ? white | (BIT(BRD->ep) & 0x0000000000FF0000ULL) : white;
+  const BITBOARD pawn_sq = BRD->epsq > 0 ? white | (BIT(BRD->epsq) & 0x0000000000FF0000ULL) : white;
 
   // Pawns
   pieces = BRD->black[0];
@@ -1148,7 +1145,7 @@ static int Mgen_b(BOARD_T *moves)
 static BITBOARD Hash(const int wtm)
 {
   int pos;
-  BITBOARD hash = ZOBRIST_EP[BRD->ep + 1] ^ ZOBRIST_WTM[wtm] ^ ZOBRIST_CASTLE[BRD->castle];
+  BITBOARD hash = ZOBRIST_EP[BRD->epsq + 1] ^ ZOBRIST_WTM[wtm] ^ ZOBRIST_CASTLE[BRD->castle];
   BITBOARD both = BOTH();
 
   while (both) {
@@ -1402,7 +1399,7 @@ static void Commands(void)
     else if (Token_next("version")) Print("%s %s by %s", NAME, VERSION, AUTHOR);
     else if (Token_next("fen"))     Command_setfen();
     else if (Token_next("suite"))   Suite(Max(1, Token_next_int()));
-    else if (Token_next("id"))      Suite(5);
+    else if (Token_next("id"))      Suite(6);
     else if (Token_next("perft"))   Perft_run(Max(1, Token_next_int()));
     else if (Token_next("bench"))   Command_bench();
     else if (Token_next("hash"))    Hashtable_set_size(Token_next_int());

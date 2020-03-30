@@ -7,8 +7,8 @@ Copyright (C) 2019 Toni Helminen
 // LastEmperor.c function prototypes
 //
 
-#ifndef FDEC_H
-#define FDEC_H
+#ifndef FPROTOS_H_GUARD
+#define FPROTOS_H_GUARD
 
 static inline BITBOARD Bishop_magic_index(const int, const BITBOARD);
 static inline BITBOARD Rook_magic_index(const int, const BITBOARD);
@@ -111,4 +111,4 @@ static void Handle_castling_w(void);
 static void Debug_log(const char *);
 static int Mgen_b(BOARD_T *);
 
-#endif /* #ifndef FDEC_H */
+#endif /* #ifndef FPROTOS_H_GUARD */
