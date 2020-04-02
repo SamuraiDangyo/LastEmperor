@@ -8,5 +8,9 @@ a Chess960 move generator (Derived from Sapeli 1.67)
 make clean build-profile strip install
 ```
 
+## Examples
+```
+lastemperor -hash 512 -perft 7
+```
 ## Credits
 logo graphics

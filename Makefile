@@ -9,7 +9,7 @@
 CC=gcc
 
 # Optimizations [-O2, -O3]
-OPT=-O3 -march=native
+OPT=-O3 -march=native -fexpensive-optimizations
 
 # Compile flags. [ -fsanitize=undefined ]
 FLAGS=-Wall -pedantic -Wextra -Wshadow $(OPT) -DNDEBUG
@@ -68,7 +68,7 @@ help:
 bench:
 	./$(EXE) -bench
 
-suite: build
+suite:
 	./$(EXE) -suite 5
 
 id:
@@ -77,14 +77,12 @@ id:
 perft:
 	./$(EXE) -fen "k7/8/2N5/1N6/8/8/8/K6n w - -" -perft 10
 
-# gprof report
 gprof:
 	$(CC) $(FLAGS) -pg $(FILES) -o $(EXE)
 	cp $(EXE) a.out
 	./a.out -bench > /dev/null
 	gprof
 
-# Check memory profile
 valgrind:
 	$(CC) $(FLAGS) -ggdb3 $(FILES) -o $(EXE) && \
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --verbose --log-file=valgrind-out.txt ./lastemperor -bench
@@ -93,4 +91,4 @@ install:
 	if [ -d $(INSTALLDIR) ]; then sudo cp -f $(EXE) $(INSTALLDIR); fi
 
 clean:
-	rm -f $(EXE) a.out lastemperor* gmon.out valgrind-out.txt LastEmperor-log.txt
+	rm -f $(EXE) a.out lastemperor* gmon.out valgrind-out.txt

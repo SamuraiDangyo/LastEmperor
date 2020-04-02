@@ -35,7 +35,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 //
 
 #define NAME            "LastEmperor"
-#define VERSION         "1.05"
+#define VERSION         "1.06"
 #define AUTHOR          "Toni Helminen"
 
 #define STARTPOS        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
@@ -46,6 +46,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 #define WHITE()         (BRD->white[0] | BRD->white[1] | BRD->white[2] | BRD->white[3] | BRD->white[4] | BRD->white[5])
 #define BLACK()         (BRD->black[0] | BRD->black[1] | BRD->black[2] | BRD->black[3] | BRD->black[4] | BRD->black[5])
 #define BOTH()          (WHITE() | BLACK())
+#define SHORT_LICENSE   "GNU General Public License version 3; for details see LICENSE"
 
 //
 // Macros
@@ -95,13 +96,8 @@ typedef struct {
   const BITBOARD nodes[7];
 } PERFT_T;
 
-//
 // LastEmperor headers
-//
-
-#include "fprotos.h"
-#include "consts.h"
-#include "all960pos.h"
+#include "LastEmperor.h"
 
 //
 // Static ( global ) variables
@@ -147,6 +143,20 @@ static int TOKENS_I                    = 0;
 static char POSITION_FEN[128]          = {0};
 static char TOKENS[MAX_TOKENS][128]    = {{0}};
 static char FEN_STR[4][128]            = {{0}};
+static const PERFT_T PERFT_SUITE[960]  = {
+                                            #include "all960pos.epd"
+                                         };
+
+/*
+// Debug
+static void Debug_log(const char *);
+static void Debug_tokens(void);
+static const char *Int_to_string(const int);
+
+static void Debug_tokens(void) {int i; Print("TOKENS ( %i ) :", TOKENS_N); for (i = 0; i < TOKENS_N; i++) Print("%i. %s", i, TOKENS[i]);}
+static const char *Int_to_string(const int x) { static char str[32]; sprintf(str, "%d", x); return str;}
+static void Debug_log(const char *str) {FILE *file = fopen("LastEmperor-log.txt", "a+"); fprintf(file, "%s\n:::\n", str); fclose(file);}
+*/
 
 //
 // Utils
@@ -180,13 +190,6 @@ static void Print(const char *format, ...)
   va_end(va);
   fprintf(stdout, "\n");
   fflush(stdout);
-}
-
-static const char *Int_to_string(const int x)
-{
-  static char str[32];
-  sprintf(str, "%d", x);
-  return str;
 }
 
 static BITBOARD Now(void)
@@ -235,42 +238,11 @@ static bool On_board(const int x, const int y)
   return x >= 0 && y >= 0 && x <= 7 && y <= 7;
 }
 
-static const char *Get_time_string(void)
-{
-  static char str[64] = {0};
-  time_t tmr;
-  struct tm *tmem;
-  time(&tmr);
-  tmem = localtime(&tmr);
-  strftime(str, 64, "%d.%m.%Y %X", tmem);
-  return str;
-}
-
-//
-// Debug
-//
-
-static void Debug_tokens(void)
-{
-  int i;
-  Print("TOKENS ( %i ) :", TOKENS_N);
-  for (i = 0; i < TOKENS_N; i++)
-    Print("%i. %s", i, TOKENS[i]);
-}
-
-static void Debug_log(const char *str)
-{
-  FILE *file = fopen("LastEmperor-log.txt", "a+");
-  fprintf(file, "%s\n%s\n:::\n", Get_time_string(), str);
-  fclose(file);
-}
-
 static void Assert(const bool test, const int line_number)
 {
-  if ( ! test) {
-    Print("LastEmperor error: Line: %i", line_number);
-    exit(EXIT_FAILURE);
-  }
+  if (test) return;
+  Print("LastEmperor error: Line: %i", line_number);
+  exit(EXIT_FAILURE);
 }
 
 //
@@ -1534,25 +1506,15 @@ static void Init(void)
 
 static void Ok(void)
 {
-  MYASSERT((sizeof(int) >= 4 && sizeof(double) >= 8 && sizeof(BITBOARD) >= 8 /* bytes */));
+  MYASSERT((sizeof(int) >= 4 && sizeof(BITBOARD) >= 8 /* bytes */));
   MYASSERT(((0x1122334455667788ULL >> 32)                   == 0x11223344ULL));
-  MYASSERT(((0x1122334455667788ULL << 32)                   == 0x5566778800000000ULL));
   MYASSERT(((0xFFFFFFFFFFFFFFFFULL & 0x8142241818244281ULL) == 0x8142241818244281ULL));
 }
 
 
-static void Happy(void)
-{
-  if (0) { // Makes gcc happy
-    Debug_log(Int_to_string(0));
-    Debug_tokens();
-  }
-}
-
 static void Go(void)
 {
   Ok();
-  Happy();
   Init();
   Commands();
 }
