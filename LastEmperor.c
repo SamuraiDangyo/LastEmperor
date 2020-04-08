@@ -30,7 +30,7 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 // Constants
 
-#define NAME           "LastEmperor 1.07"
+#define NAME           "LastEmperor 1.08"
 #define STARTPOS       "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 #define MAX_MOVES      218
 #define MAX_TOKENS     32
@@ -1287,11 +1287,11 @@ static void Print_help(void)
   Print("## LastEmperor Commands");
   Print("-help         This help");
   Print("-version      Show Version");
-  Print("-hash N       Set hash in N MB\n");
+  Print("-hash N       Set hash in N MB");
   Print("-fen [FEN]    Set fen");
   Print("-perft [1..]  Run perft position");
-  Print("-bench [01]   Benchs (0 = normal, 1 = full)");
-  Print(" Full source code, please see: <https://github.com/SamuraiDangyo/LastEmperor/>");
+  Print("-bench [01]   Benchmark (0 = normal, 1 = full)\n");
+  Print("Full source code, please see: <https://github.com/SamuraiDangyo/LastEmperor/>");
   exit(EXIT_SUCCESS);
 }
 
