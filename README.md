@@ -5,12 +5,19 @@ a Chess960 move generator (Derived from Sapeli 1.67)
 
 ## Install
 ```
-make clean build-profile strip install
+make clean all install
 ```
 
 ## Examples
+Kiwipete to depth 7 :
 ```
-lastemperor -hash 512 -perft 7
+lastemperor -fen "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -" -hash 1024 -perft 6
 ```
+
+Benchmarks :
+```
+lastemperor -bench
+```
+
 ## Credits
 logo graphics
