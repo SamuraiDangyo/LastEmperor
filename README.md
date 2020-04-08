@@ -5,7 +5,9 @@ a Chess960 move generator (Derived from Sapeli 1.67)
 
 ## Install
 ```
-make clean all install
+git clone --depth 1 https://github.com/SamuraiDangyo/LastEmperor.git
+cd LastEmperor
+make all install
 ```
 
 ## Examples
@@ -20,4 +22,4 @@ lastemperor -bench
 ```
 
 ## Credits
-logo graphics
+logo
