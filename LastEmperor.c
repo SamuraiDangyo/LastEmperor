@@ -1088,13 +1088,13 @@ static void Hashtable_set_size(const int usize)
 
 static U64 Get_perft(const U64 hash, const int depth)
 {
-  const HASH_ENTRY_T *entry = &MYHASH.array[INT(hash & MYHASH.key)];
+  const HASH_ENTRY_T *entry = &MYHASH.array[(unsigned int)(hash & MYHASH.key)];
   return entry->hash == hash && entry->depth == depth ? entry->nodes : 0;
 }
 
 static void Add_perft(const U64 hash, const U64 nodes, const int depth)
 {
-  HASH_ENTRY_T *entry = &MYHASH.array[INT(hash & MYHASH.key)];
+  HASH_ENTRY_T *entry = &MYHASH.array[(unsigned int)(hash & MYHASH.key)];
   if ( ! nodes || (entry->hash == hash && entry->nodes > nodes)) return;
   entry->depth = depth;
   entry->hash  = hash;
@@ -1181,7 +1181,7 @@ static void Perft_run(const int depth)
   int i;
   U64 nodes, start_time, diff_time, totaltime = 0, allnodes = 0;
   Print("[ %s ]", POSITION_FEN);
-  Print("depth               nodes        mnps        time");
+  Print("Depth               Nodes        Mnps        Time");
   for (i = 0; i < depth + 1; i++) {
     start_time = Now();
     nodes      = Perft(i);
@@ -1192,14 +1192,14 @@ static void Perft_run(const int depth)
   }
 
   Print("=================================================");
-  Print("                    nodes        mnps        time");
+  Print("                    Nodes        Mnps        Time");
   Perft_print(-1, allnodes, totaltime);
 }
 
 static U64 Suite_run(const int depth)
 {
   U64 start, nodes = 0, allnodes = 0;
-  Print("depth               nodes        mnps        time");
+  Print("Depth               Nodes        Mnps        Time");
   for (int i = 0; i <= depth; i++) {
     start = Now();
     nodes = Perft(i);
@@ -1220,7 +1220,6 @@ static void Bench(const bool fullsuite)
     "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
     "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8 ",
     "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10 ",
-
     // Chess960 : https://www.chessprogramming.org/Chess960_Perft_Results
     "bqnb1rkr/pp3ppp/3ppn2/2p5/5P2/P2P4/NPP1P1PP/BQ1BNRKR w HFhf - 2 9",
     "bnqbnr1r/p1p1ppkp/3p4/1p4p1/P7/3NP2P/1PPP1PP1/BNQB1RKR w HF - 0 9",
@@ -1230,17 +1229,14 @@ static void Bench(const bool fullsuite)
     "rbqkr1bn/pp1ppp2/2p1n2p/6p1/8/4BPNP/PPPPP1P1/RBQKRN2 w EAea - 0 9"
   };
   U64 start = Now();
-
   for (int i = 0; i < 12; i++) {
     strcpy(POSITION_FEN, fens[i]);
     Print("%s[ #%i: %s ]", i ? "\n" : "", i + 1, fens[i]);
     nodes += Suite_run(fullsuite ? 6 : 5);
   }
-
   Print("\n=================================================\n");
-  Print("                    nodes        mnps        time");
+  Print("                    Nodes        Mnps        Time");
   Perft_print(-1, nodes, Now() - start);
-
   MYASSERT((nodes == (fullsuite ? 21799671196 : 561735852)));
 }
 
