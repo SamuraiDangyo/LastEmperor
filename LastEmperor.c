@@ -1194,6 +1194,7 @@ static void Perft_run(const int depth)
   Print("=================================================");
   Print("                    Nodes        Mnps        Time");
   Perft_print(-1, allnodes, totaltime);
+  exit(EXIT_SUCCESS);
 }
 
 static U64 Suite_run(const int depth)
@@ -1238,6 +1239,7 @@ static void Bench(const bool fullsuite)
   Print("                    Nodes        Mnps        Time");
   Perft_print(-1, nodes, Now() - start);
   MYASSERT((nodes == (fullsuite ? 21799671196 : 561735852)));
+  exit(EXIT_SUCCESS);
 }
 
 // Commands
