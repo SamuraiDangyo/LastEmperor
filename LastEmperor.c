@@ -1168,7 +1168,7 @@ static void Perft_print(const int depth, const U64 nodes, const U64 ms)
 {
   static char str[32];
   const char *big_num = Big_number(nodes);
-  if (depth < 0) {printf("total");} else {sprintf(str, "%i", depth); Padding(str, 5);}
+  if (depth < 0) {printf("Total");} else {sprintf(str, "%i", depth); Padding(str, 5);}
   //sprintf(str, "%llu", nodes);
   Padding(big_num, 20);
   sprintf(str, "%.3f", 0.000001f * DOUBLE(Nps(nodes, ms))); Padding(str, 12);
