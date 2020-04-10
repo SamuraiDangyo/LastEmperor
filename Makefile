@@ -35,6 +35,6 @@ install:
 	if [ -d $(INSTALLDIR) ]; then sudo cp -f $(EXE) $(INSTALLDIR); fi
 
 clean:
-	rm -f $(EXE) a.out lastemperor* gmon.out valgrind-out.txt
+	rm -f a.out lastemperor* gmon.out valgrind-out.txt
 
-.PHONY: all build-profile build-win64 strip clean release install	bench
+.PHONY: all build-profile build-win64 strip clean release install bench

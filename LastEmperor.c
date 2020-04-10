@@ -1,5 +1,5 @@
 /*
-LastEmperor, a Chess960 move generator (Derived from Sapeli 1.67)
+LastEmperor, a Chess960 movegen tool (Derived from Sapeli 1.67)
 Copyright (C) 2019 Toni Helminen
 
 LastEmperor is free software: you can redistribute it and/or modify
@@ -59,7 +59,6 @@ typedef struct {
   U64 white[6];          // White bitboards
   U64 black[6];          // Black bitboards
   char board[64];        // Pieces
-  U64 hash;              // Hash of the position
   char epsq;             // En passant square
   unsigned char crigths; // Castling rights
 } BOARD_T;
@@ -171,14 +170,12 @@ static int KING_W                = 0;
 static int KING_B                = 0;
 static int ROOK_W[2]             = {0};
 static int ROOK_B[2]             = {0};
-
 static U64 MGEN_WHITE            = 0;
 static U64 MGEN_BLACK            = 0;
 static U64 MGEN_BOTH             = 0;
 static U64 MGEN_EMPTY            = 0;
 static U64 MGEN_GOOD             = 0;
 static U64 MGEN_PAWN_SQ          = 0;
-
 static U64 CASTLE_W[2]           = {0};
 static U64 CASTLE_B[2]           = {0};
 static U64 CASTLE_EMPTY_W[2]     = {0};
@@ -825,7 +822,6 @@ static void Modify_pawn_stuff_b(const int from, const int to)
 static void Add_normal_stuff_b(const int from, const int to)
 {
   const int me = BRD->board[from], eat = BRD->board[to];
-
   MGEN_MOVES[MGEN_MOVES_N] = *BRD;
   BRD                  = &MGEN_MOVES[MGEN_MOVES_N];
   BRD->epsq            = -1;
@@ -1017,13 +1013,6 @@ static void Mgen_all_b(void)
   Mgen_crigths_moves_b();
 }
 
-static inline void Swap(BOARD_T *board_a, BOARD_T *board_b)
-{
-  const BOARD_T tmp = *board_a;
-  *board_a          = *board_b;
-  *board_b          = tmp;
-}
-
 static int Mgen_w(BOARD_T *moves)
 {
   MGEN_MOVES_N = 0;
@@ -1158,6 +1147,7 @@ static const char *Big_number(U64 number)
   char str[256] = "";
   static char ret[256];
   int counter = 0, three = 2, i, len;
+  if ( ! number) {ret[0] = '0'; ret[1] = '\0'; return ret;}
   for (i = 0; i < 64; i++) {if ( ! number) break; str[counter] = '0' + (number % 10); counter++; number /= 10; if ( ! three && number) {str[counter] = ','; counter++; three = 3;} three--; str[counter + 1] = '\0';}
   for (counter = 0, len = strlen(str), i = len - 1; i >= 0; i--) {ret[counter] = str[i]; counter++;}
   ret[counter] = '\0';
@@ -1392,9 +1382,8 @@ static void Init_jump_moves(void)
 
 static void Init_tokens(int argc, char **argv)
 {
-  int i;
   Token_reset();
-  for (i = 1; i < argc; i++) {
+  for (int i = 1; i < argc; i++) {
     if (argv[i][0] == '-' && strlen(argv[i]) > 1) {
       Token_add(";");
       Token_add(argv[i] + 1);
@@ -1404,11 +1393,6 @@ static void Init_tokens(int argc, char **argv)
   }
   Token_add(";");
   //  Debug_tokens();
-}
-
-static void Init_board(void)
-{
-  Fen(STARTPOS);
 }
 
 static void Init_zobrist(void)
@@ -1430,7 +1414,7 @@ static void Init(void)
   Init_rook_magics();
   Init_jump_moves();
   Hashtable_set_size(256);
-  Init_board();
+  Fen(STARTPOS);
 }
 
 static void Go(void)
