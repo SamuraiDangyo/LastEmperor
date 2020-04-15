@@ -20,9 +20,10 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
+#include <stdarg.h>
 #include <time.h>
 #include <string.h>
-#include <stdarg.h>
 #include <unistd.h>
 #include <sys/time.h>
 #include <limits.h>
@@ -30,16 +31,14 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 
 // Constants
 
-#define NAME           "LastEmperor 1.08"
+#define NAME           "LastEmperor 1.09"
 #define STARTPOS       "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"
 #define MAX_MOVES      218
 #define MAX_TOKENS     32
-#define U64            unsigned long long int
-#define MEGABYTE       (1 << 20)
+#define U64            uint64_t
 #define WHITE()        (BRD->white[0] | BRD->white[1] | BRD->white[2] | BRD->white[3] | BRD->white[4] | BRD->white[5])
 #define BLACK()        (BRD->black[0] | BRD->black[1] | BRD->black[2] | BRD->black[3] | BRD->black[4] | BRD->black[5])
 #define BOTH()         (WHITE() | BLACK())
-#define LICENSE        "GNU General Public License version 3; for details see LICENSE"
 
 // Macros
 
@@ -48,32 +47,28 @@ along with this program. If not, see <http://www.gnu.org/licenses/>.
 #define INT(a)         ((int) (a))
 #define DOUBLE(f)      ((double) (f))
 #define ULL(a)         ((U64) (a))
-#define MAX(a, b)      (((a) > (b)) ? (a) : (b))
-#define MIN(a, b)      (((a) < (b)) ? (a) : (b))
 #define RESET(a)       memset((a), 0, sizeof((a)))
 #define MYASSERT(test) Assert((test), (__LINE__))
 
 // Structs
 
 typedef struct {
-  U64 white[6];          // White bitboards
-  U64 black[6];          // Black bitboards
-  char board[64];        // Pieces
-  char epsq;             // En passant square
-  unsigned char crigths; // Castling rights
+  U64 white[6];   // White bitboards
+  U64 black[6];   // Black bitboards
+  char board[64]; // Pieces
+  char epsq;      // En passant square
+  uint8_t castle; // Castling rights
 } BOARD_T;
 
 typedef struct {
-  U64 hash;
-  U64 nodes;
+  U64 hash, nodes;
   int depth;
 } HASH_ENTRY_T;
 
 typedef struct {
   HASH_ENTRY_T *array;
   U64 size;
-  int count;
-  int key;
+  int count, key;
 } HASH_T;
 
 // Prototypes
@@ -97,7 +92,6 @@ static const U64 ROOK_MAGIC[64] = {
   0x61482000c41820b0ULL,0x241001018a401a4ULL,0x45020c009cc04040ULL,0x308210c020081200ULL,0xa000215040040ULL,0x10a6024001928700ULL,0x42c204800c804408ULL,0x30441a28614200ULL,
   0x40100229080420aULL,0x9801084000201103ULL,0x8408622090484202ULL,0x4022001048a0e2ULL,0x280120020049902ULL,0x1200412602009402ULL,0x914900048020884ULL,0x104824281002402ULL
 };
-
 static const U64 ROOK_MASK[64] = {
   0x101010101017eULL,0x202020202027cULL,0x404040404047aULL,0x8080808080876ULL,0x1010101010106eULL,0x2020202020205eULL,0x4040404040403eULL,0x8080808080807eULL,
   0x1010101017e00ULL,0x2020202027c00ULL,0x4040404047a00ULL,0x8080808087600ULL,0x10101010106e00ULL,0x20202020205e00ULL,0x40404040403e00ULL,0x80808080807e00ULL,
@@ -108,7 +102,6 @@ static const U64 ROOK_MASK[64] = {
   0x7e010101010100ULL,0x7c020202020200ULL,0x7a040404040400ULL,0x76080808080800ULL,0x6e101010101000ULL,0x5e202020202000ULL,0x3e404040404000ULL,0x7e808080808000ULL,
   0x7e01010101010100ULL,0x7c02020202020200ULL,0x7a04040404040400ULL,0x7608080808080800ULL,0x6e10101010101000ULL,0x5e20202020202000ULL,0x3e40404040404000ULL,0x7e80808080808000ULL
 };
-
 static const U64 ROOK_MOVE_MAGICS[64] = {
   0x101010101017eULL,0x202020202027cULL,0x404040404047aULL,0x8080808080876ULL,0x1010101010106eULL,0x2020202020205eULL,0x4040404040403eULL,0x8080808080807eULL,
   0x1010101017e00ULL,0x2020202027c00ULL,0x4040404047a00ULL,0x8080808087600ULL,0x10101010106e00ULL,0x20202020205e00ULL,0x40404040403e00ULL,0x80808080807e00ULL,
@@ -119,7 +112,6 @@ static const U64 ROOK_MOVE_MAGICS[64] = {
   0x7e010101010100ULL,0x7c020202020200ULL,0x7a040404040400ULL,0x76080808080800ULL,0x6e101010101000ULL,0x5e202020202000ULL,0x3e404040404000ULL,0x7e808080808000ULL,
   0x7e01010101010100ULL,0x7c02020202020200ULL,0x7a04040404040400ULL,0x7608080808080800ULL,0x6e10101010101000ULL,0x5e20202020202000ULL,0x3e40404040404000ULL,0x7e80808080808000ULL
 };
-
 static const U64 BISHOP_MAGIC[64] = {
   0x2890208600480830ULL,0x324148050f087ULL,0x1402488a86402004ULL,0xc2210a1100044bULL,0x88450040b021110cULL,0xc0407240011ULL,0xd0246940cc101681ULL,0x1022840c2e410060ULL,
   0x4a1804309028d00bULL,0x821880304a2c0ULL,0x134088090100280ULL,0x8102183814c0208ULL,0x518598604083202ULL,0x67104040408690ULL,0x1010040020d000ULL,0x600001028911902ULL,
@@ -130,7 +122,6 @@ static const U64 BISHOP_MAGIC[64] = {
   0x1002020620608101ULL,0x1108300804090c00ULL,0x180404848840841ULL,0x100180040ac80040ULL,0x20840000c1424001ULL,0x82c00400108800ULL,0x28c0493811082aULL,0x214980910400080cULL,
   0x8d1a0210b0c000ULL,0x164c500ca0410cULL,0xc6040804283004ULL,0x14808001a040400ULL,0x180450800222a011ULL,0x600014600490202ULL,0x21040100d903ULL,0x10404821000420ULL
 };
-
 static const U64 BISHOP_MASK[64] = {
   0x40201008040200ULL,0x402010080400ULL,0x4020100a00ULL,0x40221400ULL,0x2442800ULL,0x204085000ULL,0x20408102000ULL,0x2040810204000ULL,
   0x20100804020000ULL,0x40201008040000ULL,0x4020100a0000ULL,0x4022140000ULL,0x244280000ULL,0x20408500000ULL,0x2040810200000ULL,0x4081020400000ULL,
@@ -141,7 +132,6 @@ static const U64 BISHOP_MASK[64] = {
   0x20408102000ULL,0x40810204000ULL,0xa1020400000ULL,0x142240000000ULL,0x284402000000ULL,0x500804020000ULL,0x201008040200ULL,0x402010080400ULL,
   0x2040810204000ULL,0x4081020400000ULL,0xa102040000000ULL,0x14224000000000ULL,0x28440200000000ULL,0x50080402000000ULL,0x20100804020000ULL,0x40201008040200ULL
 };
-
 static const U64 BISHOP_MOVE_MAGICS[64] = {
   0x40201008040200ULL,0x402010080400ULL,0x4020100a00ULL,0x40221400ULL,0x2442800ULL,0x204085000ULL,0x20408102000ULL,0x2040810204000ULL,
   0x20100804020000ULL,0x40201008040000ULL,0x4020100a0000ULL,0x4022140000ULL,0x244280000ULL,0x20408500000ULL,0x2040810200000ULL,0x4081020400000ULL,
@@ -212,14 +202,9 @@ static char FEN_STR[4][128]         = {{0}};
 
 // Utils
 
-static inline /* <- make me faster! */ int Max(const int a, const int b)
+static inline int Max(const int a, const int b)
 {
   return a > b ? a : b;
-}
-
-static inline int Min(const int a, const int b)
-{
-  return a < b ? a : b;
 }
 
 static bool Equal_strings(const char *str1, const char *str2)
@@ -273,7 +258,7 @@ static U64 Now(void)
 {
   struct timeval tv;
   MYASSERT(gettimeofday(&tv, NULL) == 0);
-  return 1000 * tv.tv_sec + tv.tv_usec / 1000;
+  return ULL(1000 * tv.tv_sec + tv.tv_usec / 1000);
 }
 
 static void String_join(char *s1, const char *s2)
@@ -286,7 +271,6 @@ static bool Is_number(const char ch)
   return ch >= '0' && ch <= '9';
 }
 
-// Deterministic to get same zobrist numbers every time
 static U64 Random_bb(void)
 {
   static U64 a = 0x12311227ULL, b = 0x1931311ULL, c = 0x13138141ULL;
@@ -385,7 +369,7 @@ static void Build_bitboards(void)
 
 static U64 Fill(int from, const int to)
 {
-  U64 ret   = Bit(from);
+  U64 ret = Bit(from);
   const int diff = from > to ? -1 : 1;
   if (from < 0 || to < 0 || from > 63 || to > 63) return 0;
   if (from == to) return ret;
@@ -396,7 +380,7 @@ static U64 Fill(int from, const int to)
   return ret;
 }
 
-static void Find_crigths_rooks_and_kings(void)
+static void Find_castle_rooks_and_kings(void)
 {
   int i;
   RESET(ROOK_W);
@@ -428,7 +412,7 @@ static void Fen_board(const char *fen)
     } else if (Is_number(*fen)) {
       pos += *fen - '0';
     } else {
-      BRD->board[pos] = Piece(*fen);
+      BRD->board[pos] = (char)Piece(*fen);
       pos++;
     }
     fen++;
@@ -440,30 +424,30 @@ static void Fen_KQkq(const char *fen)
   int tmp;
   while (*fen != '\0') {
     if (*fen == 'K') {
-      BRD->crigths |= 1;
+      BRD->castle |= 1;
     } else if (*fen == 'Q') {
-      BRD->crigths |= 2;
+      BRD->castle |= 2;
     } else if (*fen == 'k') {
-      BRD->crigths |= 4;
+      BRD->castle |= 4;
     } else if (*fen == 'q') {
-      BRD->crigths |= 8;
+      BRD->castle |= 8;
     } else if (*fen >= 'A' && *fen <= 'H') {
       tmp = *fen - 'A';
       if (tmp > KING_W) {
         ROOK_W[0]    = tmp;
-        BRD->crigths |= 1;
+        BRD->castle |= 1;
       } else if (tmp < KING_W) {
         ROOK_W[1]    = tmp;
-        BRD->crigths |= 2;
+        BRD->castle |= 2;
       }
     } else if (*fen >= 'a' && *fen <= 'h') {
       tmp = *fen - 'a';
       if (tmp > X(KING_B)) {
         ROOK_B[0]    = 56 + tmp;
-        BRD->crigths |= 4;
+        BRD->castle |= 4;
       } else if (tmp < X(KING_B)) {
         ROOK_B[1]    = 56 + tmp;
-        BRD->crigths |= 8;
+        BRD->castle |= 8;
       }
     }
     fen++;
@@ -497,12 +481,12 @@ static void Fen_split(const char *fen)
   }
 }
 
-static void Build_crigths_bitboards(void)
+static void Build_castle_bitboards(void)
 {
-  CASTLE_W[0] = Fill(KING_W, 6);
-  CASTLE_W[1] = Fill(KING_W, 2);
-  CASTLE_B[0] = Fill(KING_B, 56 + 6);
-  CASTLE_B[1] = Fill(KING_B, 56 + 2);
+  CASTLE_W[0]       = Fill(KING_W, 6);
+  CASTLE_W[1]       = Fill(KING_W, 2);
+  CASTLE_B[0]       = Fill(KING_B, 56 + 6);
+  CASTLE_B[1]       = Fill(KING_B, 56 + 2);
   CASTLE_EMPTY_W[0] = (CASTLE_W[0] | Fill(ROOK_W[0], 5     )) ^ (Bit(KING_W) | Bit(ROOK_W[0]));
   CASTLE_EMPTY_B[0] = (CASTLE_B[0] | Fill(ROOK_B[0], 56 + 5)) ^ (Bit(KING_B) | Bit(ROOK_B[0]));
   CASTLE_EMPTY_W[1] = (CASTLE_W[1] | Fill(ROOK_W[1], 3     )) ^ (Bit(KING_W) | Bit(ROOK_W[1]));
@@ -515,7 +499,6 @@ static void Build_crigths_bitboards(void)
   }
 }
 
-// https://en.wikipedia.org/wiki/Forsyth-Edwards_Notation
 static void Fen_create(const char *fen)
 {
   Fen_split(fen);
@@ -524,9 +507,9 @@ static void Fen_create(const char *fen)
   if (FEN_STR[1][0] == '\0') return;
   WTM = FEN_STR[1][0] == 'w';
   if (FEN_STR[2][0] == '\0') return;
-  Find_crigths_rooks_and_kings();
+  Find_castle_rooks_and_kings();
   Fen_KQkq(FEN_STR[2]);
-  Build_crigths_bitboards();
+  Build_castle_bitboards();
   if (FEN_STR[3][0] == '\0') return;
   Fen_ep(FEN_STR[3]);
 }
@@ -548,10 +531,10 @@ static void Assume_legal_position(void)
   if (BRD->epsq != -1) {
     if (WTM) MYASSERT((Y(BRD->epsq) == 5)); else MYASSERT((Y(BRD->epsq) == 2));
   }
-  if (BRD->crigths & 1) MYASSERT((X(ROOK_W[0]) >= X(KING_W) && BRD->board[ROOK_W[0]] ==  4));
-  if (BRD->crigths & 2) MYASSERT((X(ROOK_W[1]) <= X(KING_W) && BRD->board[ROOK_W[1]] ==  4));
-  if (BRD->crigths & 4) MYASSERT((X(ROOK_B[0]) >= X(KING_B) && BRD->board[ROOK_B[0]] == -4));
-  if (BRD->crigths & 8) MYASSERT((X(ROOK_B[1]) <= X(KING_B) && BRD->board[ROOK_B[1]] == -4));
+  if (BRD->castle & 1) MYASSERT((X(ROOK_W[0]) >= X(KING_W) && BRD->board[ROOK_W[0]] ==  4));
+  if (BRD->castle & 2) MYASSERT((X(ROOK_W[1]) <= X(KING_W) && BRD->board[ROOK_W[1]] ==  4));
+  if (BRD->castle & 4) MYASSERT((X(ROOK_B[0]) >= X(KING_B) && BRD->board[ROOK_B[0]] == -4));
+  if (BRD->castle & 8) MYASSERT((X(ROOK_B[1]) <= X(KING_B) && BRD->board[ROOK_B[1]] == -4));
 }
 
 static void Fen(const char *fen)
@@ -570,7 +553,6 @@ static void Fen(const char *fen)
 }
 
 // Checks
-
 
 static inline bool Checks_here_w(const int pos)
 {
@@ -592,7 +574,7 @@ static inline bool Checks_here_b(const int pos)
           (KING_MOVES[pos]               & BRD->black[5]));
 }
 
-static bool Checks_crigths_w(U64 squares)
+static bool Checks_castle_w(U64 squares)
 {
   while (squares) {
     if (Checks_here_w(Lsb(squares))) return 1;
@@ -601,7 +583,7 @@ static bool Checks_crigths_w(U64 squares)
   return 0;
 }
 
-static bool Checks_crigths_b(U64 squares)
+static bool Checks_castle_b(U64 squares)
 {
   while (squares) {
     if (Checks_here_b(Lsb(squares))) return 1;
@@ -642,13 +624,13 @@ static inline U64 Rook_magic_moves(const int position, const U64 mask)
   return ROOK_MAGIC_MOVES[position][Rook_magic_index(position, mask)];
 }
 
-static void Add_crigths_OO_w(void)
+static void Add_castle_OO_w(void)
 {
-  if (Checks_crigths_b(CASTLE_W[0])) return;
+  if (Checks_castle_b(CASTLE_W[0])) return;
   MGEN_MOVES[MGEN_MOVES_N] = *BRD;
   BRD                    = &MGEN_MOVES[MGEN_MOVES_N];
   BRD->epsq              = -1;
-  BRD->crigths           &= 4 | 8;
+  BRD->castle           &= 4 | 8;
   BRD->board[ROOK_W[0]]  = 0;
   BRD->board[KING_W]     = 0;
   BRD->board[5]          = 4;
@@ -661,13 +643,13 @@ static void Add_crigths_OO_w(void)
   MGEN_MOVES_N++;
 }
 
-static void Add_crigths_OOO_w(void)
+static void Add_castle_OOO_w(void)
 {
-  if (Checks_crigths_b(CASTLE_W[1])) return;
+  if (Checks_castle_b(CASTLE_W[1])) return;
   MGEN_MOVES[MGEN_MOVES_N] = *BRD;
   BRD                    = &MGEN_MOVES[MGEN_MOVES_N];
   BRD->epsq              = -1;
-  BRD->crigths           &= 4 | 8;
+  BRD->castle           &= 4 | 8;
   BRD->board[ROOK_W[1]]  = 0;
   BRD->board[KING_W]     = 0;
   BRD->board[3]          = 4;
@@ -680,19 +662,19 @@ static void Add_crigths_OOO_w(void)
   MGEN_MOVES_N++;
 }
 
-static void Mgen_crigths_moves_w(void)
+static void Mgen_castle_moves_w(void)
 {
-  if ((BRD->crigths & 1) && ! (CASTLE_EMPTY_W[0] & MGEN_BOTH)) {Add_crigths_OO_w();  BRD = BRD_ORIGINAL;}
-  if ((BRD->crigths & 2) && ! (CASTLE_EMPTY_W[1] & MGEN_BOTH)) {Add_crigths_OOO_w(); BRD = BRD_ORIGINAL;}
+  if ((BRD->castle & 1) && ! (CASTLE_EMPTY_W[0] & MGEN_BOTH)) {Add_castle_OO_w();  BRD = BRD_ORIGINAL;}
+  if ((BRD->castle & 2) && ! (CASTLE_EMPTY_W[1] & MGEN_BOTH)) {Add_castle_OOO_w(); BRD = BRD_ORIGINAL;}
 }
 
-static void Add_crigths_OO_b(void)
+static void Add_castle_OO_b(void)
 {
-  if (Checks_crigths_w(CASTLE_B[0])) return;
+  if (Checks_castle_w(CASTLE_B[0])) return;
   MGEN_MOVES[MGEN_MOVES_N] = *BRD;
   BRD = &MGEN_MOVES[MGEN_MOVES_N];
   BRD->epsq              = -1;
-  BRD->crigths           &= 1 | 2;
+  BRD->castle           &= 1 | 2;
   BRD->board[ROOK_B[0]]  = 0;
   BRD->board[KING_B]     = 0;
   BRD->board[56 + 5]     = -4;
@@ -705,13 +687,13 @@ static void Add_crigths_OO_b(void)
   MGEN_MOVES_N++;
 }
 
-static void Add_crigths_OOO_b(void)
+static void Add_castle_OOO_b(void)
 {
-  if (Checks_crigths_w(CASTLE_B[1])) return;
+  if (Checks_castle_w(CASTLE_B[1])) return;
   MGEN_MOVES[MGEN_MOVES_N] = *BRD;
   BRD = &MGEN_MOVES[MGEN_MOVES_N];
   BRD->epsq              = -1;
-  BRD->crigths           &= 1 | 2;
+  BRD->castle           &= 1 | 2;
   BRD->board[ROOK_B[1]]  = 0;
   BRD->board[KING_B]     = 0;
   BRD->board[56 + 3]     = -4;
@@ -724,31 +706,31 @@ static void Add_crigths_OOO_b(void)
   MGEN_MOVES_N++;
 }
 
-static void Mgen_crigths_moves_b(void)
+static void Mgen_castle_moves_b(void)
 {
-  if ((BRD->crigths & 4) && ! (CASTLE_EMPTY_B[0] & MGEN_BOTH)) {Add_crigths_OO_b();  BRD = BRD_ORIGINAL;}
-  if ((BRD->crigths & 8) && ! (CASTLE_EMPTY_B[1] & MGEN_BOTH)) {Add_crigths_OOO_b(); BRD = BRD_ORIGINAL;}
+  if ((BRD->castle & 4) && ! (CASTLE_EMPTY_B[0] & MGEN_BOTH)) {Add_castle_OO_b();  BRD = BRD_ORIGINAL;}
+  if ((BRD->castle & 8) && ! (CASTLE_EMPTY_B[1] & MGEN_BOTH)) {Add_castle_OOO_b(); BRD = BRD_ORIGINAL;}
 }
 
-static void Check_crigths_rights_w(void)
+static void Check_castle_rights_w(void)
 {
-  if (BRD->board[KING_W]    != 6) {BRD->crigths &= 4 | 8; return;}
-  if (BRD->board[ROOK_W[0]] != 4)  BRD->crigths &= 2 | 4 | 8;
-  if (BRD->board[ROOK_W[1]] != 4)  BRD->crigths &= 1 | 4 | 8;
+  if (BRD->board[KING_W]    != 6) {BRD->castle &= 4 | 8; return;}
+  if (BRD->board[ROOK_W[0]] != 4)  BRD->castle &= 2 | 4 | 8;
+  if (BRD->board[ROOK_W[1]] != 4)  BRD->castle &= 1 | 4 | 8;
 }
 
-static void Check_crigths_rights_b(void)
+static void Check_castle_rights_b(void)
 {
-  if (BRD->board[KING_B]    != -6) {BRD->crigths &= 1 | 2; return;}
-  if (BRD->board[ROOK_B[0]] != -4)  BRD->crigths &= 1 | 2 | 8;
-  if (BRD->board[ROOK_B[1]] != -4)  BRD->crigths &= 1 | 2 | 4;
+  if (BRD->board[KING_B]    != -6) {BRD->castle &= 1 | 2; return;}
+  if (BRD->board[ROOK_B[0]] != -4)  BRD->castle &= 1 | 2 | 8;
+  if (BRD->board[ROOK_B[1]] != -4)  BRD->castle &= 1 | 2 | 4;
 }
 
-static void Handle_crigths_rights(void)
+static void Handle_castle_rights(void)
 {
-  if ( ! BRD->crigths) return;
-  Check_crigths_rights_w();
-  Check_crigths_rights_b();
+  if ( ! BRD->castle) return;
+  Check_castle_rights_w();
+  Check_castle_rights_b();
 }
 
 static void Modify_pawn_stuff_w(const int from, const int to)
@@ -757,7 +739,7 @@ static void Modify_pawn_stuff_w(const int from, const int to)
     BRD->board[to - 8]  = 0;
     BRD->black[0]      ^= Bit(to - 8);
   } else if (Y(to) - Y(from) == 2) {
-    BRD->epsq = to - 8;
+    BRD->epsq = (char)(to - 8);
   }
 }
 
@@ -773,7 +755,7 @@ static void Add_promotion_w(const int from, const int to, const int piece)
   BRD->white[piece - 1] |= Bit(to);
   if (eat) BRD->black[-eat - 1] ^= Bit(to);
   if (Checks_b()) return;
-  Handle_crigths_rights();
+  Handle_castle_rights();
   MGEN_MOVES_N++;
 }
 
@@ -791,7 +773,7 @@ static void Add_normal_stuff_w(const int from, const int to)
     BRD->black[-eat - 1] ^= Bit(to);
   if (BRD->board[to] == 1) Modify_pawn_stuff_w(from, to);
   if (Checks_b()) return;
-  Handle_crigths_rights();
+  Handle_castle_rights();
   MGEN_MOVES_N++;
 }
 
@@ -833,7 +815,7 @@ static void Add_normal_stuff_b(const int from, const int to)
     BRD->white[eat - 1] ^= Bit(to);
   if (BRD->board[to] == -1) Modify_pawn_stuff_b(from, to);
   if (Checks_w()) return;
-  Handle_crigths_rights();
+  Handle_castle_rights();
   MGEN_MOVES_N++;
 }
 
@@ -849,7 +831,7 @@ static void Add_promotion_b(const int from, const int to, const int piece)
   BRD->black[-piece - 1] |= Bit(to);
   if (eat) BRD->white[eat - 1] ^= Bit(to);
   if (Checks_w()) return;
-  Handle_crigths_rights();
+  Handle_castle_rights();
   MGEN_MOVES_N++;
 }
 
@@ -998,7 +980,7 @@ static void Mgen_all_w(void)
   Mgen_bishops_plus_queens_w();
   Mgen_rooks_plus_queens_w();
   Mgen_king_w();
-  Mgen_crigths_moves_w();
+  Mgen_castle_moves_w();
 }
 
 static void Mgen_all_b(void)
@@ -1010,7 +992,7 @@ static void Mgen_all_b(void)
   Mgen_bishops_plus_queens_b();
   Mgen_rooks_plus_queens_b();
   Mgen_king_b();
-  Mgen_crigths_moves_b();
+  Mgen_castle_moves_b();
 }
 
 static int Mgen_w(BOARD_T *moves)
@@ -1036,9 +1018,9 @@ static int Mgen_b(BOARD_T *moves)
 static U64 Hash(const int wtm)
 {
   int pos;
-  U64 hash = ZOBRIST_EP[BRD->epsq + 1] ^ ZOBRIST_WTM[wtm] ^ ZOBRIST_CASTLE[BRD->crigths], both = BOTH();
+  U64 hash = ZOBRIST_EP[BRD->epsq + 1] ^ ZOBRIST_WTM[wtm] ^ ZOBRIST_CASTLE[BRD->castle], both = BOTH();
   while (both) {
-    pos  = Lsb(both);
+    pos   = Lsb(both);
     both &= both - 1;
     hash ^= ZOBRIST_BOARD[BRD->board[pos] + 6][pos];
   }
@@ -1053,14 +1035,13 @@ static void Hashtable_free_memory(void)
   MYHASH.size = 0;
 }
 
-// [1 MB, 1 PB]
 static void Hashtable_set_size(const int usize)
 {
   U64 size = ULL(usize);
   Hashtable_free_memory();
-  size = MAX(size, 1);
-  size = MIN(size, 1024 * 1024);
-  size = MEGABYTE * size;
+  if (size < 1) size = 1;
+  if (size > 1024 * 1024) size = 1024 * 1024;
+  size = (1 << 20) * size;
   MYHASH.size = 1;
   while (MYHASH.size <= size) MYHASH.size <<= 1;
   MYHASH.size  >>= 1;
@@ -1069,7 +1050,7 @@ static void Hashtable_set_size(const int usize)
   while (MYHASH.key <= MYHASH.count) MYHASH.key <<= 1;
   MYHASH.key   >>= 1;
   MYHASH.key    -= 1; // 1000b = 8d / - 1d / 0111b = 7d
-  MYHASH.array   = (HASH_ENTRY_T*) calloc(MYHASH.count, sizeof(HASH_ENTRY_T)); // <- Cast for g++
+  MYHASH.array   = (HASH_ENTRY_T*) calloc(MYHASH.count, sizeof(HASH_ENTRY_T));
   MYASSERT(MYHASH.array != NULL);
 }
 
@@ -1077,13 +1058,13 @@ static void Hashtable_set_size(const int usize)
 
 static U64 Get_perft(const U64 hash, const int depth)
 {
-  const HASH_ENTRY_T *entry = &MYHASH.array[(unsigned int)(hash & MYHASH.key)];
+  const HASH_ENTRY_T *entry = &MYHASH.array[(uint32_t)(hash & ULL(MYHASH.key))];
   return entry->hash == hash && entry->depth == depth ? entry->nodes : 0;
 }
 
 static void Add_perft(const U64 hash, const U64 nodes, const int depth)
 {
-  HASH_ENTRY_T *entry = &MYHASH.array[(unsigned int)(hash & MYHASH.key)];
+  HASH_ENTRY_T *entry = &MYHASH.array[(uint32_t)(hash & ULL(MYHASH.key))];
   if ( ! nodes || (entry->hash == hash && entry->nodes > nodes)) return;
   entry->depth = depth;
   entry->hash  = hash;
@@ -1099,7 +1080,7 @@ static U64 Perft_w(const int depth)
   U64 nodes      = Get_perft(hash, depth);
   if (nodes) return nodes;
   len = Mgen_w(moves);
-  if (depth <= 0) return len;
+  if (depth <= 0) return ULL(len);
   nodes = 0;
   for (i = 0; i < len; i++) {
     BRD    = moves + i;
@@ -1117,7 +1098,7 @@ static U64 Perft_b(const int depth)
   U64 nodes      = Get_perft(hash, depth);
   if (nodes) return nodes;
   len = Mgen_b(moves);
-  if (depth <= 0) return len;
+  if (depth <= 0) return ULL(len);
   nodes = 0;
   for (i = 0; i < len; i++) {
     BRD    = moves + i;
@@ -1134,13 +1115,6 @@ static U64 Perft(const int depth)
   return 1;
 }
 
-static void Padding(const char *str, const int space)
-{
-  const int len = space - strlen(str);
-  for (int i = 0; i < len; i++) printf(" ");
-  printf("%s", str);
-}
-
 // 561735852 -> 561,735,852
 static const char *Big_number(U64 number)
 {
@@ -1148,22 +1122,17 @@ static const char *Big_number(U64 number)
   static char ret[256];
   int counter = 0, three = 2, i, len;
   if ( ! number) {ret[0] = '0'; ret[1] = '\0'; return ret;}
-  for (i = 0; i < 64; i++) {if ( ! number) break; str[counter] = '0' + (number % 10); counter++; number /= 10; if ( ! three && number) {str[counter] = ','; counter++; three = 3;} three--; str[counter + 1] = '\0';}
-  for (counter = 0, len = strlen(str), i = len - 1; i >= 0; i--) {ret[counter] = str[i]; counter++;}
+  for (i = 0; i < 100; i++) {if ( ! number) break; str[counter] = '0' + (number % 10); counter++; number /= 10; if ( ! three && number) {str[counter] = ','; counter++; three = 3;} three--; str[counter + 1] = '\0';}
+  for (counter = 0, len = INT(strlen(str)), i = len - 1; i >= 0; i--) {ret[counter] = str[i]; counter++;}
   ret[counter] = '\0';
   return ret;
 }
 
 static void Perft_print(const int depth, const U64 nodes, const U64 ms)
 {
-  static char str[32];
   const char *big_num = Big_number(nodes);
-  if (depth < 0) {printf("Total");} else {sprintf(str, "%i", depth); Padding(str, 5);}
-  //sprintf(str, "%llu", nodes);
-  Padding(big_num, 20);
-  sprintf(str, "%.3f", 0.000001f * DOUBLE(Nps(nodes, ms))); Padding(str, 12);
-  sprintf(str, "%.3f", 0.001f * DOUBLE(ms)); Padding(str, 12);
-  printf("\n");
+  if (depth < 0) printf("Total"); else printf("%5i", depth);
+  printf("%20s %11.3f %11.3f\n", big_num, 0.000001 * DOUBLE(Nps(nodes, ms)), 0.001 * DOUBLE(ms));
 }
 
 static void Perft_run(const int depth)
@@ -1180,7 +1149,6 @@ static void Perft_run(const int depth)
     allnodes   += nodes;
     Perft_print(i, nodes, diff_time);
   }
-
   Print("=================================================");
   Print("                    Nodes        Mnps        Time");
   Perft_print(-1, allnodes, totaltime);
@@ -1244,7 +1212,7 @@ static void Set_fen(void)
     String_join(POSITION_FEN, " ");
     Token_pop();
   }
-  POSITION_FEN[Max(0, strlen(POSITION_FEN) - 1)] = '\0';
+  POSITION_FEN[Max(0, INT(strlen(POSITION_FEN) - 1))] = '\0';
   Fen(POSITION_FEN);
 }
 
@@ -1268,14 +1236,13 @@ static void Commands(void)
 
 static void Print_help(void)
 {
-  Print("# %s", NAME);
-  Print("%s\n", LICENSE);
+  Print("# %s\nGNU General Public License version 3; for details see 'LICENSE'\n", NAME);
   Print("Usage: lastemperor [COMMAND] [OPTION]? ...");
   Print("> lastemperor -hash 512 -perft 6 # Set 512 MB hash and run perft\n");
   Print("## LastEmperor Commands");
   Print("-help         This help");
   Print("-version      Show Version");
-  Print("-hash N       Set hash in N MB");
+  Print("-hash [N]     Set hash in N MB");
   Print("-fen [FEN]    Set fen");
   Print("-perft [1..]  Run perft position");
   Print("-bench [01]   Benchmark (0 = normal, 1 = full)\n");
@@ -1295,21 +1262,19 @@ static U64 Permutate_bb(const U64 moves, const int index)
       good[total] = i;
       total++;
     }
-  for (i = 0; i < popn; i++)
-    if ((1 << i) & index)
-      permutations |= Bit(good[i]);
+  for (i = 0; i < popn; i++) if ((1 << i) & index) permutations |= Bit(good[i]);
   return permutations & moves;
 }
 
 static U64 Make_slider_magic_moves(const int *slider_vectors, const int pos, const U64 moves)
 {
-  int j, k, x, y;
+  int i, j, x, y;
   U64 tmp, possible_moves = 0;
   const int x_pos = X(pos), y_pos = Y(pos);
-  for (j = 0; j < 4; j++)
-    for (k = 1; k < 8; k++) {
-      x = x_pos + k * slider_vectors[2 * j];
-      y = y_pos + k * slider_vectors[2 * j + 1];
+  for (i = 0; i < 4; i++)
+    for (j = 1; j < 8; j++) {
+      x = x_pos + j * slider_vectors[2 * i];
+      y = y_pos + j * slider_vectors[2 * i + 1];
       if ( ! On_board(x, y)) break;
       tmp             = Bit(8 * y + x);
       possible_moves |= tmp;
@@ -1419,7 +1384,7 @@ static void Init(void)
 
 static void Go(void)
 {
-  MYASSERT(((sizeof(int) >= 4) && (sizeof(U64) >= 8) && ((0x1122334455667788ULL >> 32)  == 0x11223344ULL) && ((0xFFFFFFFFFFFFFFFFULL & 0x8142241818244281ULL) == 0x8142241818244281ULL)));
+  MYASSERT(((sizeof(int) >= 4) && ((0x1122334455667788ULL >> 32)  == 0x11223344ULL)));
   Init();
   Commands();
 }
@@ -1427,7 +1392,7 @@ static void Go(void)
 // "Si vis pacem, para bellum" -- Plato, The Laws of Plato
 int main(int argc, char **argv)
 {
-  atexit(Hashtable_free_memory); // No memory leaks
+  atexit(Hashtable_free_memory);
   Init_tokens(argc, argv);
   Go();
   return EXIT_SUCCESS;
