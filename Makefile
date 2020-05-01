@@ -1,12 +1,11 @@
 # LastEmperor, a Chess960 movegen tool (Derived from Sapeli 1.67)
-# Copyright (C) 2019-2020 Toni Helminen
-# GPLv3
+# Copyright (C) 2019-2020 Toni Helminen <GPLv3>
 
-# Compilers: [gcc, g++, clang, clang++]
-CC=gcc
-OPT=-O3 -march=native
-FLAGS=-Wall -pedantic -Wextra -Wshadow $(OPT) -DNDEBUG
-FILES=LastEmperor.c
+# Compilers: [g++, clang++]
+CC=g++
+OPT=-O2 -march=native
+FLAGS=-Wall -pedantic -Wextra -Wshadow $(OPT)
+FILES=LastEmperor.cpp
 EXE=lastemperor
 
 all:
