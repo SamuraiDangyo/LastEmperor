@@ -1,15 +1,11 @@
-# LastEmperor, a Chess960 movegen tool (Derived from Sapeli 1.67)
 # Copyright (C) 2019-2020 Toni Helminen <GPLv3>
 
-# Compilers: [g++, clang++]
-CC=g++
-OPT=-O2 -march=native
-FLAGS=-Wall -pedantic -Wextra -Wshadow $(OPT)
-FILES=LastEmperor.cpp
+CC=gcc
+INSTALLDIR=/usr/bin/
 EXE=lastemperor
 
 all:
-	$(CC) $(FLAGS) $(FILES) -o $(EXE)
+	$(CC) LastEmperor.c -Wall -pedantic -Wextra -Wshadow -O2 -march=native $(EXTRAFLAGS) -o $(EXE)
 
 bench:
 	./$(EXE) -bench
@@ -21,6 +17,6 @@ install:
 	if [ -d $(INSTALLDIR) ]; then sudo cp -f $(EXE) $(INSTALLDIR); fi
 
 clean:
-	rm -f a.out lastemperor*
+	rm -f $(EXE)*
 
 .PHONY: all strip clean install bench
