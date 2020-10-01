@@ -1,22 +1,31 @@
 # Copyright (C) 2019-2020 Toni Helminen <GPLv3>
 
-CC=gcc
-INSTALLDIR=/usr/bin/
+# Definitions
+
+CC=clang
+CFLAGS=-O2 -march=native -Wall -pedantic -Wextra -DNDEBUG
+NAME=LastEmperor.c
 EXE=lastemperor
+INSTALLDIR=/usr/bin/
+
+# Targets
 
 all:
-	$(CC) LastEmperor.c -Wall -pedantic -Wextra -Wshadow -O2 -march=native $(EXTRAFLAGS) -o $(EXE)
+	$(CC) $(CFLAGS) $(NAME) -o $(EXE)
 
-bench:
-	./$(EXE) -bench
-
-perft:
-	./$(EXE) -fen "k7/8/2N5/1N6/8/8/8/K6n w - -" -perft 11
-
-install:
-	if [ -d $(INSTALLDIR) ]; then sudo cp -f $(EXE) $(INSTALLDIR); fi
+strip:
+	strip ./$(EXE)
 
 clean:
-	rm -f $(EXE)*
+	rm -f $(EXE)* *.out
 
-.PHONY: all strip clean install bench
+install: all
+	if [ -d $(INSTALLDIR) ]; then sudo cp -f $(EXE) $(INSTALLDIR); fi
+
+bench: all
+	./$(EXE) -bench
+
+perft: all
+	./$(EXE) -fen "k7/8/2N5/1N6/8/8/8/K6n w - -" -perft 11
+
+.PHONY: all strip clean install bench perft

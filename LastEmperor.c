@@ -1,206 +1,164 @@
 /*
-LastEmperor, a Chess960 movegen tool (Derived from Sapeli 1.67)
-Copyright (C) 2019 Toni Helminen
+LastEmperor, a Chess960 move generator tool (Derived from Sapeli 1.67)
+Copyright (C) 2019-2020 Toni Helminen
 
-LastEmperor is free software: you can redistribute it and/or modify
+This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-LastEmperor is distributed in the hope that it will be useful,
+This program is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program. If not, see <http://www.gnu.org/licenses/>.
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
 // Headers
 
-#include <stdarg.h>
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdarg.h>
 #include <stdint.h>
 #include <unistd.h>
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <immintrin.h>
 
 // Constants
 
-#define NAME        "LastEmperor 1.11"
-#define STARTPOS    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq"
-#define MAX_MOVES   218
-#define MAX_TOKENS  32
-#define WHITE()     (BRD->white[0] | BRD->white[1] | BRD->white[2] | BRD->white[3] | BRD->white[4] | BRD->white[5])
-#define BLACK()     (BRD->black[0] | BRD->black[1] | BRD->black[2] | BRD->black[3] | BRD->black[4] | BRD->black[5])
-#define BOTH()      (WHITE() | BLACK())
+#define NAME         "LastEmperor 1.11"
+#define MAX_MOVES    218 // Legal moves
+#define MAX_TOKENS   30
+#define STARTPOS     "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -"
 
 // Macros
 
-#define X(a)        ((a) & 7)
-#define Y(a)        ((a) >> 3)
-#define RESET(a)    memset((a), 0, sizeof((a)))
+#define WHITE()      (BRD->white[0] | BRD->white[1] | BRD->white[2] | BRD->white[3] | BRD->white[4] | BRD->white[5])
+#define BLACK()      (BRD->black[0] | BRD->black[1] | BRD->black[2] | BRD->black[3] | BRD->black[4] | BRD->black[5])
+#define BOTH()       (WHITE() | BLACK())
+#define X(bb)        ((bb) & 7)
+#define Y(bb)        ((bb) >> 3)
+#define RESET(memo)  memset((memo), 0, sizeof((memo)))
 
 // Structs
 
 typedef struct {
-  uint64_t white[6]; // White
-  uint64_t black[6]; // Black
-  char board[64];    // Pieces
-  char epsq;         // En passant square
-  uint8_t castle;    // Castling rights
+  uint64_t
+    white[6],  // White bitboards
+    black[6];  // Black bitboards
+  char
+    board[64], // Pieces black and white
+    epsq;      // En passant square
+  uint8_t
+    castle;    // Castling rights
 } BOARD_T;
 
 typedef struct {
-  uint64_t hash, nodes;
-  int depth;
+  uint64_t
+    hash,
+    nodes;
+  int
+    depth;
 } HASH_T;
+
+// Consts
+
+static const int
+  ROOK_VECTORS[8]        = {1,0,0,1,0,-1,-1,0},
+  BISHOP_VECTORS[8]      = {1,1,-1,-1,1,-1,-1,1},
+  KING_VECTORS[2 * 8]    = {1,0,0,1,0,-1,-1,0,1,1,-1,-1,1,-1,-1,1},
+  KNIGHT_VECTORS[2 * 8]  = {2,1,-2,1,2,-1,-2,-1,1,2,-1,2,1,-2,-1,-2};
+
+static const uint64_t
+  ROOK_MASK[64] =
+    {0x101010101017eULL,0x202020202027cULL,0x404040404047aULL,0x8080808080876ULL,0x1010101010106eULL,0x2020202020205eULL,0x4040404040403eULL,0x8080808080807eULL,
+     0x1010101017e00ULL,0x2020202027c00ULL,0x4040404047a00ULL,0x8080808087600ULL,0x10101010106e00ULL,0x20202020205e00ULL,0x40404040403e00ULL,0x80808080807e00ULL,
+     0x10101017e0100ULL,0x20202027c0200ULL,0x40404047a0400ULL,0x8080808760800ULL,0x101010106e1000ULL,0x202020205e2000ULL,0x404040403e4000ULL,0x808080807e8000ULL,
+     0x101017e010100ULL,0x202027c020200ULL,0x404047a040400ULL,0x8080876080800ULL,0x1010106e101000ULL,0x2020205e202000ULL,0x4040403e404000ULL,0x8080807e808000ULL,
+     0x1017e01010100ULL,0x2027c02020200ULL,0x4047a04040400ULL,0x8087608080800ULL,0x10106e10101000ULL,0x20205e20202000ULL,0x40403e40404000ULL,0x80807e80808000ULL,
+     0x17e0101010100ULL,0x27c0202020200ULL,0x47a0404040400ULL,0x8760808080800ULL,0x106e1010101000ULL,0x205e2020202000ULL,0x403e4040404000ULL,0x807e8080808000ULL,
+     0x7e010101010100ULL,0x7c020202020200ULL,0x7a040404040400ULL,0x76080808080800ULL,0x6e101010101000ULL,0x5e202020202000ULL,0x3e404040404000ULL,0x7e808080808000ULL,
+     0x7e01010101010100ULL,0x7c02020202020200ULL,0x7a04040404040400ULL,0x7608080808080800ULL,0x6e10101010101000ULL,0x5e20202020202000ULL,0x3e40404040404000ULL,0x7e80808080808000ULL},
+  ROOK_MOVE_MAGICS[64] =
+    {0x101010101017eULL,0x202020202027cULL,0x404040404047aULL,0x8080808080876ULL,0x1010101010106eULL,0x2020202020205eULL,0x4040404040403eULL,0x8080808080807eULL,
+     0x1010101017e00ULL,0x2020202027c00ULL,0x4040404047a00ULL,0x8080808087600ULL,0x10101010106e00ULL,0x20202020205e00ULL,0x40404040403e00ULL,0x80808080807e00ULL,
+     0x10101017e0100ULL,0x20202027c0200ULL,0x40404047a0400ULL,0x8080808760800ULL,0x101010106e1000ULL,0x202020205e2000ULL,0x404040403e4000ULL,0x808080807e8000ULL,
+     0x101017e010100ULL,0x202027c020200ULL,0x404047a040400ULL,0x8080876080800ULL,0x1010106e101000ULL,0x2020205e202000ULL,0x4040403e404000ULL,0x8080807e808000ULL,
+     0x1017e01010100ULL,0x2027c02020200ULL,0x4047a04040400ULL,0x8087608080800ULL,0x10106e10101000ULL,0x20205e20202000ULL,0x40403e40404000ULL,0x80807e80808000ULL,
+     0x17e0101010100ULL,0x27c0202020200ULL,0x47a0404040400ULL,0x8760808080800ULL,0x106e1010101000ULL,0x205e2020202000ULL,0x403e4040404000ULL,0x807e8080808000ULL,
+     0x7e010101010100ULL,0x7c020202020200ULL,0x7a040404040400ULL,0x76080808080800ULL,0x6e101010101000ULL,0x5e202020202000ULL,0x3e404040404000ULL,0x7e808080808000ULL,
+     0x7e01010101010100ULL,0x7c02020202020200ULL,0x7a04040404040400ULL,0x7608080808080800ULL,0x6e10101010101000ULL,0x5e20202020202000ULL,0x3e40404040404000ULL,0x7e80808080808000ULL},
+  BISHOP_MASK[64] =
+    {0x40201008040200ULL,0x402010080400ULL,0x4020100a00ULL,0x40221400ULL,0x2442800ULL,0x204085000ULL,0x20408102000ULL,0x2040810204000ULL,
+     0x20100804020000ULL,0x40201008040000ULL,0x4020100a0000ULL,0x4022140000ULL,0x244280000ULL,0x20408500000ULL,0x2040810200000ULL,0x4081020400000ULL,
+     0x10080402000200ULL,0x20100804000400ULL,0x4020100a000a00ULL,0x402214001400ULL,0x24428002800ULL,0x2040850005000ULL,0x4081020002000ULL,0x8102040004000ULL,
+     0x8040200020400ULL,0x10080400040800ULL,0x20100a000a1000ULL,0x40221400142200ULL,0x2442800284400ULL,0x4085000500800ULL,0x8102000201000ULL,0x10204000402000ULL,
+     0x4020002040800ULL,0x8040004081000ULL,0x100a000a102000ULL,0x22140014224000ULL,0x44280028440200ULL,0x8500050080400ULL,0x10200020100800ULL,0x20400040201000ULL,
+     0x2000204081000ULL,0x4000408102000ULL,0xa000a10204000ULL,0x14001422400000ULL,0x28002844020000ULL,0x50005008040200ULL,0x20002010080400ULL,0x40004020100800ULL,
+     0x20408102000ULL,0x40810204000ULL,0xa1020400000ULL,0x142240000000ULL,0x284402000000ULL,0x500804020000ULL,0x201008040200ULL,0x402010080400ULL,
+     0x2040810204000ULL,0x4081020400000ULL,0xa102040000000ULL,0x14224000000000ULL,0x28440200000000ULL,0x50080402000000ULL,0x20100804020000ULL,0x40201008040200ULL},
+  BISHOP_MOVE_MAGICS[64] =
+    {0x40201008040200ULL,0x402010080400ULL,0x4020100a00ULL,0x40221400ULL,0x2442800ULL,0x204085000ULL,0x20408102000ULL,0x2040810204000ULL,
+     0x20100804020000ULL,0x40201008040000ULL,0x4020100a0000ULL,0x4022140000ULL,0x244280000ULL,0x20408500000ULL,0x2040810200000ULL,0x4081020400000ULL,
+     0x10080402000200ULL,0x20100804000400ULL,0x4020100a000a00ULL,0x402214001400ULL,0x24428002800ULL,0x2040850005000ULL,0x4081020002000ULL,0x8102040004000ULL,
+     0x8040200020400ULL,0x10080400040800ULL,0x20100a000a1000ULL,0x40221400142200ULL,0x2442800284400ULL,0x4085000500800ULL,0x8102000201000ULL,0x10204000402000ULL,
+     0x4020002040800ULL,0x8040004081000ULL,0x100a000a102000ULL,0x22140014224000ULL,0x44280028440200ULL,0x8500050080400ULL,0x10200020100800ULL,0x20400040201000ULL,
+     0x2000204081000ULL,0x4000408102000ULL,0xa000a10204000ULL,0x14001422400000ULL,0x28002844020000ULL,0x50005008040200ULL,0x20002010080400ULL,0x40004020100800ULL,
+     0x20408102000ULL,0x40810204000ULL,0xa1020400000ULL,0x142240000000ULL,0x284402000000ULL,0x500804020000ULL,0x201008040200ULL,0x402010080400ULL,
+     0x2040810204000ULL,0x4081020400000ULL,0xa102040000000ULL,0x14224000000000ULL,0x28440200000000ULL,0x50080402000000ULL,0x20100804020000ULL,0x40201008040200ULL};
+
+// Variables
+
+static BOARD_T
+  BRD_TMP = {{0},{0},{0},0,0}, *BRD = &BRD_TMP, *MGEN_MOVES = 0, *BRD_ORIGINAL = 0, BRD_EMPTY = {{0},{0},{0},0,0};
+
+static int
+  TOKENS_N = 0, TOKENS_I = 0, KING_W = 0, KING_B = 0, MGEN_MOVES_N = 0, ROOK_W[2] = {0}, ROOK_B[2] = {0},
+  HASH_COUNT = 0, HASH_KEY = 0;
+
+static char
+  POSITION_FEN[90] = STARTPOS, FEN_STR[5][90] = {{0}}, TOKENS[MAX_TOKENS][90] = {{0}};
+
+static uint64_t
+  MGEN_BLACK = 0, MGEN_BOTH = 0, MGEN_EMPTY = 0, MGEN_GOOD = 0, MGEN_PAWN_SQ = 0, MGEN_WHITE = 0, PAWN_1_MOVES_W[64] = {0},
+  PAWN_1_MOVES_B[64] = {0}, PAWN_2_MOVES_W[64] = {0}, PAWN_2_MOVES_B[64] = {0}, ZOBRIST_EP[64]= {0}, ZOBRIST_CASTLE[16] = {0},
+  ZOBRIST_WTM[2] = {0}, ZOBRIST_BOARD[13][64] = {{0}}, CASTLE_W[2] = {0}, CASTLE_B[2] = {0}, CASTLE_EMPTY_W[2] = {0},
+  CASTLE_EMPTY_B[2] = {0}, BISHOP_MOVES[64] = {0}, ROOK_MOVES[64] = {0}, QUEEN_MOVES[64] = {0}, KNIGHT_MOVES[64] = {0},
+  KING_MOVES[64] = {0}, PAWN_CHECKS_W[64] = {0}, PAWN_CHECKS_B[64] = {0}, RANDOM_SEED = 131783,
+  BISHOP_MAGIC_MOVES[64][512] = {{0}}, ROOK_MAGIC_MOVES[64][4096] = {{0}}, HASH_SIZE = 0;
+
+static bool
+  WTM = 0;
+
+static HASH_T
+  *HASH = 0;
 
 // Prototypes
 
-static uint64_t BishopMagicMoves(const int, const uint64_t);
-static uint64_t RookMagicMoves(const int, const uint64_t);
-static bool ChecksW();
-static bool ChecksB();
 static uint64_t PerftB(const int);
-static void PrintHelp();
-
-// Magics
-
-static const uint64_t ROOK_MAGIC[64] = {
-  0x548001400080106cULL,0x900184000110820ULL,0x428004200a81080ULL,0x140088082000c40ULL,0x1480020800011400ULL,0x100008804085201ULL,0x2a40220001048140ULL,0x50000810000482aULL,
-  0x250020100020a004ULL,0x3101880100900a00ULL,0x200a040a00082002ULL,0x1004300044032084ULL,0x2100408001013ULL,0x21f00440122083ULL,0xa204280406023040ULL,0x2241801020800041ULL,
-  0xe10100800208004ULL,0x2010401410080ULL,0x181482000208805ULL,0x4080101000021c00ULL,0xa250210012080022ULL,0x4210641044000827ULL,0x8081a02300d4010ULL,0x8008012000410001ULL,
-  0x28c0822120108100ULL,0x500160020aa005ULL,0xc11050088c1000ULL,0x48c00101000a288ULL,0x494a184408028200ULL,0x20880100240006ULL,0x10b4010200081ULL,0x40a200260000490cULL,
-  0x22384003800050ULL,0x7102001a008010ULL,0x80020c8010900c0ULL,0x100204082a001060ULL,0x8000118188800428ULL,0x58e0020009140244ULL,0x100145040040188dULL,0x44120220400980ULL,
-  0x114001007a00800ULL,0x80a0100516304000ULL,0x7200301488001000ULL,0x1000151040808018ULL,0x3000a200010e0020ULL,0x1000849180802810ULL,0x829100210208080ULL,0x1004050021528004ULL,
-  0x61482000c41820b0ULL,0x241001018a401a4ULL,0x45020c009cc04040ULL,0x308210c020081200ULL,0xa000215040040ULL,0x10a6024001928700ULL,0x42c204800c804408ULL,0x30441a28614200ULL,
-  0x40100229080420aULL,0x9801084000201103ULL,0x8408622090484202ULL,0x4022001048a0e2ULL,0x280120020049902ULL,0x1200412602009402ULL,0x914900048020884ULL,0x104824281002402ULL
-}, ROOK_MASK[64] = {
-  0x101010101017eULL,0x202020202027cULL,0x404040404047aULL,0x8080808080876ULL,0x1010101010106eULL,0x2020202020205eULL,0x4040404040403eULL,0x8080808080807eULL,
-  0x1010101017e00ULL,0x2020202027c00ULL,0x4040404047a00ULL,0x8080808087600ULL,0x10101010106e00ULL,0x20202020205e00ULL,0x40404040403e00ULL,0x80808080807e00ULL,
-  0x10101017e0100ULL,0x20202027c0200ULL,0x40404047a0400ULL,0x8080808760800ULL,0x101010106e1000ULL,0x202020205e2000ULL,0x404040403e4000ULL,0x808080807e8000ULL,
-  0x101017e010100ULL,0x202027c020200ULL,0x404047a040400ULL,0x8080876080800ULL,0x1010106e101000ULL,0x2020205e202000ULL,0x4040403e404000ULL,0x8080807e808000ULL,
-  0x1017e01010100ULL,0x2027c02020200ULL,0x4047a04040400ULL,0x8087608080800ULL,0x10106e10101000ULL,0x20205e20202000ULL,0x40403e40404000ULL,0x80807e80808000ULL,
-  0x17e0101010100ULL,0x27c0202020200ULL,0x47a0404040400ULL,0x8760808080800ULL,0x106e1010101000ULL,0x205e2020202000ULL,0x403e4040404000ULL,0x807e8080808000ULL,
-  0x7e010101010100ULL,0x7c020202020200ULL,0x7a040404040400ULL,0x76080808080800ULL,0x6e101010101000ULL,0x5e202020202000ULL,0x3e404040404000ULL,0x7e808080808000ULL,
-  0x7e01010101010100ULL,0x7c02020202020200ULL,0x7a04040404040400ULL,0x7608080808080800ULL,0x6e10101010101000ULL,0x5e20202020202000ULL,0x3e40404040404000ULL,0x7e80808080808000ULL
-}, ROOK_MOVE_MAGICS[64] = {
-  0x101010101017eULL,0x202020202027cULL,0x404040404047aULL,0x8080808080876ULL,0x1010101010106eULL,0x2020202020205eULL,0x4040404040403eULL,0x8080808080807eULL,
-  0x1010101017e00ULL,0x2020202027c00ULL,0x4040404047a00ULL,0x8080808087600ULL,0x10101010106e00ULL,0x20202020205e00ULL,0x40404040403e00ULL,0x80808080807e00ULL,
-  0x10101017e0100ULL,0x20202027c0200ULL,0x40404047a0400ULL,0x8080808760800ULL,0x101010106e1000ULL,0x202020205e2000ULL,0x404040403e4000ULL,0x808080807e8000ULL,
-  0x101017e010100ULL,0x202027c020200ULL,0x404047a040400ULL,0x8080876080800ULL,0x1010106e101000ULL,0x2020205e202000ULL,0x4040403e404000ULL,0x8080807e808000ULL,
-  0x1017e01010100ULL,0x2027c02020200ULL,0x4047a04040400ULL,0x8087608080800ULL,0x10106e10101000ULL,0x20205e20202000ULL,0x40403e40404000ULL,0x80807e80808000ULL,
-  0x17e0101010100ULL,0x27c0202020200ULL,0x47a0404040400ULL,0x8760808080800ULL,0x106e1010101000ULL,0x205e2020202000ULL,0x403e4040404000ULL,0x807e8080808000ULL,
-  0x7e010101010100ULL,0x7c020202020200ULL,0x7a040404040400ULL,0x76080808080800ULL,0x6e101010101000ULL,0x5e202020202000ULL,0x3e404040404000ULL,0x7e808080808000ULL,
-  0x7e01010101010100ULL,0x7c02020202020200ULL,0x7a04040404040400ULL,0x7608080808080800ULL,0x6e10101010101000ULL,0x5e20202020202000ULL,0x3e40404040404000ULL,0x7e80808080808000ULL
-}, BISHOP_MAGIC[64] = {
-  0x2890208600480830ULL,0x324148050f087ULL,0x1402488a86402004ULL,0xc2210a1100044bULL,0x88450040b021110cULL,0xc0407240011ULL,0xd0246940cc101681ULL,0x1022840c2e410060ULL,
-  0x4a1804309028d00bULL,0x821880304a2c0ULL,0x134088090100280ULL,0x8102183814c0208ULL,0x518598604083202ULL,0x67104040408690ULL,0x1010040020d000ULL,0x600001028911902ULL,
-  0x8810183800c504c4ULL,0x2628200121054640ULL,0x28003000102006ULL,0x4100c204842244ULL,0x1221c50102421430ULL,0x80109046e0844002ULL,0xc128600019010400ULL,0x812218030404c38ULL,
-  0x1224152461091c00ULL,0x1c820008124000aULL,0xa004868015010400ULL,0x34c080004202040ULL,0x200100312100c001ULL,0x4030048118314100ULL,0x410000090018ULL,0x142c010480801ULL,
-  0x8080841c1d004262ULL,0x81440f004060406ULL,0x400a090008202ULL,0x2204020084280080ULL,0xb820060400008028ULL,0x110041840112010ULL,0x8002080a1c84400ULL,0x212100111040204aULL,
-  0x9412118200481012ULL,0x804105002001444cULL,0x103001280823000ULL,0x40088e028080300ULL,0x51020d8080246601ULL,0x4a0a100e0804502aULL,0x5042028328010ULL,0xe000808180020200ULL,
-  0x1002020620608101ULL,0x1108300804090c00ULL,0x180404848840841ULL,0x100180040ac80040ULL,0x20840000c1424001ULL,0x82c00400108800ULL,0x28c0493811082aULL,0x214980910400080cULL,
-  0x8d1a0210b0c000ULL,0x164c500ca0410cULL,0xc6040804283004ULL,0x14808001a040400ULL,0x180450800222a011ULL,0x600014600490202ULL,0x21040100d903ULL,0x10404821000420ULL
-}, BISHOP_MASK[64] = {
-  0x40201008040200ULL,0x402010080400ULL,0x4020100a00ULL,0x40221400ULL,0x2442800ULL,0x204085000ULL,0x20408102000ULL,0x2040810204000ULL,
-  0x20100804020000ULL,0x40201008040000ULL,0x4020100a0000ULL,0x4022140000ULL,0x244280000ULL,0x20408500000ULL,0x2040810200000ULL,0x4081020400000ULL,
-  0x10080402000200ULL,0x20100804000400ULL,0x4020100a000a00ULL,0x402214001400ULL,0x24428002800ULL,0x2040850005000ULL,0x4081020002000ULL,0x8102040004000ULL,
-  0x8040200020400ULL,0x10080400040800ULL,0x20100a000a1000ULL,0x40221400142200ULL,0x2442800284400ULL,0x4085000500800ULL,0x8102000201000ULL,0x10204000402000ULL,
-  0x4020002040800ULL,0x8040004081000ULL,0x100a000a102000ULL,0x22140014224000ULL,0x44280028440200ULL,0x8500050080400ULL,0x10200020100800ULL,0x20400040201000ULL,
-  0x2000204081000ULL,0x4000408102000ULL,0xa000a10204000ULL,0x14001422400000ULL,0x28002844020000ULL,0x50005008040200ULL,0x20002010080400ULL,0x40004020100800ULL,
-  0x20408102000ULL,0x40810204000ULL,0xa1020400000ULL,0x142240000000ULL,0x284402000000ULL,0x500804020000ULL,0x201008040200ULL,0x402010080400ULL,
-  0x2040810204000ULL,0x4081020400000ULL,0xa102040000000ULL,0x14224000000000ULL,0x28440200000000ULL,0x50080402000000ULL,0x20100804020000ULL,0x40201008040200ULL
-}, BISHOP_MOVE_MAGICS[64] = {
-  0x40201008040200ULL,0x402010080400ULL,0x4020100a00ULL,0x40221400ULL,0x2442800ULL,0x204085000ULL,0x20408102000ULL,0x2040810204000ULL,
-  0x20100804020000ULL,0x40201008040000ULL,0x4020100a0000ULL,0x4022140000ULL,0x244280000ULL,0x20408500000ULL,0x2040810200000ULL,0x4081020400000ULL,
-  0x10080402000200ULL,0x20100804000400ULL,0x4020100a000a00ULL,0x402214001400ULL,0x24428002800ULL,0x2040850005000ULL,0x4081020002000ULL,0x8102040004000ULL,
-  0x8040200020400ULL,0x10080400040800ULL,0x20100a000a1000ULL,0x40221400142200ULL,0x2442800284400ULL,0x4085000500800ULL,0x8102000201000ULL,0x10204000402000ULL,
-  0x4020002040800ULL,0x8040004081000ULL,0x100a000a102000ULL,0x22140014224000ULL,0x44280028440200ULL,0x8500050080400ULL,0x10200020100800ULL,0x20400040201000ULL,
-  0x2000204081000ULL,0x4000408102000ULL,0xa000a10204000ULL,0x14001422400000ULL,0x28002844020000ULL,0x50005008040200ULL,0x20002010080400ULL,0x40004020100800ULL,
-  0x20408102000ULL,0x40810204000ULL,0xa1020400000ULL,0x142240000000ULL,0x284402000000ULL,0x500804020000ULL,0x201008040200ULL,0x402010080400ULL,
-  0x2040810204000ULL,0x4081020400000ULL,0xa102040000000ULL,0x14224000000000ULL,0x28440200000000ULL,0x50080402000000ULL,0x20100804020000ULL,0x40201008040200ULL
-};
-
-// Board
-
-static const BOARD_T BRD_EMPTY        = {{0},{0},{0},0,0};
-static BOARD_T BRD_2                  = {{0},{0},{0},0,0};
-static BOARD_T *BRD                   = &BRD_2;
-static BOARD_T *BRD_ORIGINAL          = 0;
-static bool WTM                       = 0;
-
-// Move generator
-
-static BOARD_T *MOVES                 = 0;
-static int MOVES_N                    = 0;
-static int KING_W                     = 0;
-static int KING_B                     = 0;
-static int ROOK_W[2]                  = {0};
-static int ROOK_B[2]                  = {0};
-static uint64_t MGEN_WHITE            = 0;
-static uint64_t MGEN_BLACK            = 0;
-static uint64_t MGEN_BOTH             = 0;
-static uint64_t MGEN_EMPTY            = 0;
-static uint64_t MGEN_GOOD             = 0;
-static uint64_t MGEN_PAWN_SQ          = 0;
-static uint64_t CASTLE_W[2]           = {0};
-static uint64_t CASTLE_B[2]           = {0};
-static uint64_t CASTLE_EMPTY_W[2]     = {0};
-static uint64_t CASTLE_EMPTY_B[2]     = {0};
-static uint64_t KNIGHT_MOVES[64]      = {0};
-static uint64_t KING_MOVES[64]        = {0};
-static uint64_t PAWN_CHECKS_W[64]     = {0};
-static uint64_t PAWN_CHECKS_B[64]     = {0};
-static uint64_t PAWN_1_MOVES_W[64]    = {0};
-static uint64_t PAWN_1_MOVES_B[64]    = {0};
-static uint64_t PAWN_2_MOVES_W[64]    = {0};
-static uint64_t PAWN_2_MOVES_B[64]    = {0};
-static uint64_t BISHOP_MAGIC_MOVES[64][512] = {{0}};
-static uint64_t ROOK_MAGIC_MOVES[64][4096]  = {{0}};
-
-// Zobrist
-
-static uint64_t ZOBRIST_BOARD[13][64] = {{0}};
-static uint64_t ZOBRIST_EP[64]        = {0};
-static uint64_t ZOBRIST_CASTLE[16]    = {0};
-static uint64_t ZOBRIST_WTM[2]        = {0};
-
-// Hash
-
-static HASH_T *HASH                   = 0;
-static uint64_t HASH_SIZE             = 0;
-static int HASH_COUNT                 = 0;
-static int HASH_KEY                   = 0;
-
-// Misc
-
-static uint64_t RANDOM_SEED           = 131783;
-static char TOKENS[MAX_TOKENS][128]   = {{0}};
-static int TOKENS_N                   = 0;
-static int TOKENS_I                   = 0;
-static char POSITION_FEN[128]         = STARTPOS;
-static char FEN_STR[4][128]           = {{0}};
-
-// static void DebugTokens() {int i; Print("TOKENS ( %i ) :", TOKENS_N); for (i = 0; i < TOKENS_N; i++) Print("%i. %s", i, TOKENS[i]);}
-// static void DebugLog(const char *str) {FILE *file = fopen("LastEmperor-log.txt", "a+"); fprintf(file, "%s\n:::\n", str); fclose(file);}
+static uint64_t RookMagicMoves(const int, const uint64_t);
+static uint64_t BishopMagicMoves(const int, const uint64_t);
 
 // Utils
 
+static inline int Max(const int a, const int b) {
+  return a > b ? a : b;
+}
+
 static uint64_t Nps(const uint64_t nodes, const uint64_t ms) {
-  return ms ? (1000 * nodes) / ms : 0;
+  return (1000 * nodes) / (ms + 1);
 }
 
 static inline int Lsb(const uint64_t bb) {
   return __builtin_ctzll(bb);
 }
 
-static inline int Popcount(const uint64_t bb) {
+static inline int PopCount(const uint64_t bb) {
   return __builtin_popcountll(bb);
 }
 
@@ -208,7 +166,7 @@ static inline uint64_t ClearBit(const uint64_t bb) {
   return bb & (bb - 1);
 }
 
-static uint64_t Bit(const int nbits) {
+static inline uint64_t Bit(const int nbits) {
   return 0x1ULL << nbits;
 }
 
@@ -221,198 +179,102 @@ static void Print(const char *format, ...) {
   fflush(stdout);
 }
 
-static uint64_t Now() {
+static void Assert(const bool test, const char *msg) {
+  if (test) return;
+  Print(msg);
+  exit(EXIT_FAILURE);
+}
+
+static uint64_t Now(void) {
   struct timeval tv;
-  assert(gettimeofday(&tv, NULL) == 0);
+  if (gettimeofday(&tv, NULL)) return 0;
   return (uint64_t) (1000 * tv.tv_sec + tv.tv_usec / 1000);
 }
 
-static bool IsNumber(const char ch) {
-  return ch >= '0' && ch <= '9';
-}
-
-static uint64_t RandomBb() {
-  static uint64_t a = 0x12311227ULL, b = 0x1931311ULL, c = 0x13138141ULL;
+static uint64_t RandomBB(void) { // Deterministic
+  static uint64_t a = 0X12311227ULL, b = 0X1931311ULL, c = 0X13138141ULL;
   a ^= b + c;
   b ^= b * c + 0x1717711ULL;
-  c *= 3;
-  c += 1;
+  c  = (3 * c) + 1;
 #define MIXER(val) (((val) << 7) ^ ((val) >> 5))
   return MIXER(a) ^ MIXER(b) ^ MIXER(c);
 }
 
-static uint64_t RandomUint64T() {
-  int i;
-  uint64_t ret = 0;
-  for (i = 0; i < 8; i++) ret ^= RandomBb() << (8 * i);
-  return ret;
+static uint64_t Random8x64(void) {
+  uint64_t val = 0;
+  for (int i = 0; i < 8; i++) val ^= RandomBB() << (8 * i);
+  return val;
 }
 
 static bool OnBoard(const int x, const int y) {
-  return x >= 0 && y >= 0 && x <= 7 && y <= 7;
+  return x >= 0 && x <= 7 && y >= 0 && y <= 7;
+}
+
+static inline uint64_t Hash(const int wtm) {
+  uint64_t hash = ZOBRIST_EP[BRD->epsq + 1] ^ ZOBRIST_WTM[wtm] ^ ZOBRIST_CASTLE[BRD->castle], both = BOTH();
+  for (int sq; both; both = ClearBit(both)) {sq = Lsb(both); hash ^= ZOBRIST_BOARD[BRD->board[sq] + 6][sq];}
+  return hash;
 }
 
 // Token stuff
 
-void TokenAdd(const char *token) {
-  assert(TOKENS_N + 1 <= MAX_TOKENS);
-  strcpy(TOKENS[TOKENS_N], token);
-  TOKENS_N++;
-}
-
-bool TokenOk() {
-  return TOKENS_I < TOKENS_N;
-}
-
-static const char *TokenCurrent() {
-  return TokenOk() ? TOKENS[TOKENS_I] : "\0";
-}
-
-static void TokenPop() {
-  TOKENS_I++;
-}
-
-static bool TokenIs(const char *token) {
-  return TokenOk() && !strcmp(token, TokenCurrent());
-}
-
-static bool Token(const char *token) {
-  if (!TokenIs(token)) return 0;
-  TokenPop();
-  return 1;
-}
-
-static int TokenInt() {
-  int ret = 0;
-  if (TokenOk() && TOKENS[TOKENS_I][0] != '-') {
-    ret = atoi(TOKENS[TOKENS_I]);
-    TokenPop();
-  }
-  return ret;
-}
+static void TokenAdd(const char *token) {if (TOKENS_N >= MAX_TOKENS) return; strcpy(TOKENS[TOKENS_N], token); TOKENS_N++;}
+static bool TokenOk(void) {return TOKENS_I < TOKENS_N;}
+static const char *TokenCurrent(void) {return TokenOk() ? TOKENS[TOKENS_I] : "";}
+static void TokenPop(void) {TOKENS_I++;}
+static bool TokenIs(const char *token) {return TokenOk() && !strcmp(token, TokenCurrent());}
+static bool Token(const char *token) {if (!TokenIs(token)) return 0; TokenPop(); return 1;}
+static int TokenInt(void) {int val = 0; if (TokenOk()) {val = atoi(TOKENS[TOKENS_I]); TokenPop();} return val;}
 
 // Board stuff
 
-static void BuildBitboards() {
+static void BuildBitboards(void) {
   RESET(BRD->white);
   RESET(BRD->black);
   for (int i = 0; i < 64; i++)
-    if (BRD->board[i] > 0)      BRD->white[ BRD->board[i] - 1] |= Bit(i);
+    if (     BRD->board[i] > 0) BRD->white[ BRD->board[i] - 1] |= Bit(i);
     else if (BRD->board[i] < 0) BRD->black[-BRD->board[i] - 1] |= Bit(i);
 }
 
 static uint64_t Fill(int from, const int to) {
-  uint64_t ret = Bit(from);
+  uint64_t ret   = Bit(from);
   const int diff = from > to ? -1 : 1;
   if (from < 0 || to < 0 || from > 63 || to > 63) return 0;
   if (from == to) return ret;
-  while (from != to) {
+  do {
     from += diff;
     ret  |= Bit(from);
-  }
+  } while (from != to);
   return ret;
 }
 
-static void FindCastleRooksAndKings() {
+static void FindKings(void) {
+  for (int i = 0; i < 64; i++)
+    if (     BRD->board[i] ==  6) KING_W = i;
+    else if (BRD->board[i] == -6) KING_B = i;
+}
+
+static void FindRank1Rank8Rooks(void) {
   int i;
-  RESET(ROOK_W);
-  RESET(ROOK_B);
-  KING_W = 0;
-  KING_B = 0;
-  for (i = 0; i < 64; i++)                  if (BRD->board[i] ==  6) KING_W    = i;
-  for (i = KING_W + 1; i < 8; i++)          if (BRD->board[i] ==  4) ROOK_W[0] = i;
-  for (i = KING_W - 1; i > -1; i--)         if (BRD->board[i] ==  4) ROOK_W[1] = i;
-  for (i = 0; i < 64; i++)                  if (BRD->board[i] == -6) KING_B    = i;
-  for (i = KING_B + 1; i < 64; i++)         if (BRD->board[i] == -4) ROOK_B[0] = i;
+  for (i = KING_W + 1; i <  8; i++) if (BRD->board[i] == 4) ROOK_W[0] = i;
+  for (i = KING_W - 1; i > -1; i--) if (BRD->board[i] == 4) ROOK_W[1] = i;
+  for (i = KING_B + 1; i < 64;         i++) if (BRD->board[i] == -4) ROOK_B[0] = i;
   for (i = KING_B - 1; i > 64 - 8 - 1; i--) if (BRD->board[i] == -4) ROOK_B[1] = i;
 }
 
-static int Piece(const char piece) {
-  for (int i = 0; i < 6; i++)
-    if (     piece == "pnbrqk"[i]) return -i - 1;
-    else if (piece == "PNBRQK"[i]) return  i + 1;
-  return 0;
+static void FindCastlingRooksAndKings(void) {
+  KING_W = KING_B = 0;
+  FindKings();
+  RESET(ROOK_W);
+  RESET(ROOK_B);
+  FindRank1Rank8Rooks();
 }
 
-static void FenBoard(const char *fen) {
-  int pos = 56;
-  while (*fen != '\0' && pos >= 0) {
-    if (*fen == '/') {
-      pos -= 16;
-    } else if (IsNumber(*fen)) {
-      pos += *fen - '0';
-    } else {
-      BRD->board[pos] = (char)Piece(*fen);
-      pos++;
-    }
-    fen++;
-  }
-}
-
-static void FenKQkq(const char *fen) {
-  int tmp;
-  while (*fen != '\0') {
-    if (*fen == 'K') {
-      BRD->castle |= 1;
-    } else if (*fen == 'Q') {
-      BRD->castle |= 2;
-    } else if (*fen == 'k') {
-      BRD->castle |= 4;
-    } else if (*fen == 'q') {
-      BRD->castle |= 8;
-    } else if (*fen >= 'A' && *fen <= 'H') {
-      tmp = *fen - 'A';
-      if (tmp > KING_W) {
-        ROOK_W[0]    = tmp;
-        BRD->castle |= 1;
-      } else if (tmp < KING_W) {
-        ROOK_W[1]    = tmp;
-        BRD->castle |= 2;
-      }
-    } else if (*fen >= 'a' && *fen <= 'h') {
-      tmp = *fen - 'a';
-      if (tmp > X(KING_B)) {
-        ROOK_B[0]    = 56 + tmp;
-        BRD->castle |= 4;
-      } else if (tmp < X(KING_B)) {
-        ROOK_B[1]    = 56 + tmp;
-        BRD->castle |= 8;
-      }
-    }
-    fen++;
-  }
-}
-
-static void FenEp(const char *fen) {
-  if (*fen == '-' || *fen == '\0' || *(fen + 1) == '\0') return;
-  BRD->epsq = *fen - 'a';
-  fen++;
-  BRD->epsq += 8 * (*fen - '1');
-}
-
-static void FenSplit(const char *fen) {
-  int len, i, piece = 0;
-  for (i = 0; i < 4; i++) FEN_STR[i][0] = '\0';
-  while (piece < 4) {
-    while (*fen == ' ') fen++;
-    if (*fen == '\0') return;
-    len = 0;
-    while (*fen != ' ' && *fen != '\0') {
-      assert((len < 128));
-      FEN_STR[piece][len] = *fen;
-      len++;
-      FEN_STR[piece][len] = '\0';
-      fen++;
-    }
-    piece++;
-  }
-}
-
-static void BuildCastleBitboards() {
-  CASTLE_W[0]       = Fill(KING_W, 6);
-  CASTLE_W[1]       = Fill(KING_W, 2);
-  CASTLE_B[0]       = Fill(KING_B, 56 + 6);
-  CASTLE_B[1]       = Fill(KING_B, 56 + 2);
+static void BuildCastlingBitboards(void) {
+  CASTLE_W[0] = Fill(KING_W, 6);
+  CASTLE_W[1] = Fill(KING_W, 2);
+  CASTLE_B[0] = Fill(KING_B, 56 + 6);
+  CASTLE_B[1] = Fill(KING_B, 56 + 2);
   CASTLE_EMPTY_W[0] = (CASTLE_W[0] | Fill(ROOK_W[0], 5     )) ^ (Bit(KING_W) | Bit(ROOK_W[0]));
   CASTLE_EMPTY_B[0] = (CASTLE_B[0] | Fill(ROOK_B[0], 56 + 5)) ^ (Bit(KING_B) | Bit(ROOK_B[0]));
   CASTLE_EMPTY_W[1] = (CASTLE_W[1] | Fill(ROOK_W[1], 3     )) ^ (Bit(KING_W) | Bit(ROOK_W[1]));
@@ -425,6 +287,55 @@ static void BuildCastleBitboards() {
   }
 }
 
+static int Piece(const char piece) {
+  for (int i = 0; i < 6; i++)
+    if (     piece == "pnbrqk"[i]) return -i - 1;
+    else if (piece == "PNBRQK"[i]) return  i + 1;
+  return 0;
+}
+
+static void FenBoard(const char *fen) {
+  for (int sq = 56; *fen != '\0' && sq >= 0; fen++) if (*fen == '/') sq -= 16; else if (*fen >= '0' && *fen <= '9') sq += *fen - '0'; else BRD->board[sq++] = Piece(*fen);
+}
+
+static void FenKQkq(const char *fen) {
+  for (; *fen != '\0'; fen++)
+    if (*fen == 'K') {
+      BRD->castle |= 1;
+    } else if (*fen == 'Q') {
+      BRD->castle |= 2;
+    } else if (*fen == 'k') {
+      BRD->castle |= 4;
+    } else if (*fen == 'q') {
+      BRD->castle |= 8;
+    } else if (*fen >= 'A' && *fen <= 'H') {
+      const int tmp = *fen - 'A';
+      if (     tmp > KING_W) {ROOK_W[0] = tmp; BRD->castle |= 1;}
+      else if (tmp < KING_W) {ROOK_W[1] = tmp; BRD->castle |= 2;}
+    } else if (*fen >= 'a' && *fen <= 'h') {
+      const int tmp = *fen - 'a';
+      if (     tmp > X(KING_B)) {ROOK_B[0] = 56 + tmp; BRD->castle |= 4;}
+      else if (tmp < X(KING_B)) {ROOK_B[1] = 56 + tmp; BRD->castle |= 8;}
+    }
+}
+
+static void FenEp(const char *fen) {
+  if (*fen == '-' || *fen == '\0' || *(fen + 1) == '\0') return;
+  BRD->epsq = (*fen - 'a') + (8 * (*(fen + 1) - '1'));
+}
+
+static void FenSplit(const char *fen) {
+  for (int i = 0; i < 5; i++) FEN_STR[i][0] = '\0';
+  for (int split = 0; split < 5; split++) {
+    while (*fen == ' ') fen++;
+    if (*fen == '\0') return;
+    for (int len = 0; *fen != ' ' && *fen != '\0'; len++, fen++) {
+      FEN_STR[split][len]     = *fen;
+      FEN_STR[split][len + 1] = '\0';
+    }
+  }
+}
+
 static void FenCreate(const char *fen) {
   FenSplit(fen);
   if (FEN_STR[0][0] == '\0') return;
@@ -432,249 +343,227 @@ static void FenCreate(const char *fen) {
   if (FEN_STR[1][0] == '\0') return;
   WTM = FEN_STR[1][0] == 'w';
   if (FEN_STR[2][0] == '\0') return;
-  FindCastleRooksAndKings();
+  FindCastlingRooksAndKings();
   FenKQkq(FEN_STR[2]);
-  BuildCastleBitboards();
+  BuildCastlingBitboards();
   if (FEN_STR[3][0] == '\0') return;
   FenEp(FEN_STR[3]);
 }
 
-static void AssumeLegalPosition() {
-  assert((Popcount(BRD->white[5]) == 1 && Popcount(BRD->black[5]) == 1));
-  if (WTM) assert((!ChecksW())); else assert((!ChecksB()));
-  assert((BRD->board[Lsb(BRD->white[5])] == 6 && BRD->board[Lsb(BRD->black[5])] == -6));
-  for (int i = 0; i < 64; i++) {
-    if (BRD->board[i] > 0)
-      assert(((BRD->board[i] <=  6) && (Bit(i) & BRD->white[ BRD->board[i] - 1])));
-    else if (BRD->board[i] < 0)
-      assert(((BRD->board[i] >= -6) && (Bit(i) & BRD->black[-BRD->board[i] - 1])));
-    else
-      assert((!(Bit(i) & BOTH())));
-  }
-  assert((BRD->epsq >= -1 && BRD->epsq <= 63));
-  if (BRD->epsq != -1) {
-    if (WTM) assert((Y(BRD->epsq) == 5)); else assert((Y(BRD->epsq) == 2));
-  }
-  if (BRD->castle & 1) assert((X(ROOK_W[0]) >= X(KING_W) && BRD->board[ROOK_W[0]] ==  4));
-  if (BRD->castle & 2) assert((X(ROOK_W[1]) <= X(KING_W) && BRD->board[ROOK_W[1]] ==  4));
-  if (BRD->castle & 4) assert((X(ROOK_B[0]) >= X(KING_B) && BRD->board[ROOK_B[0]] == -4));
-  if (BRD->castle & 8) assert((X(ROOK_B[1]) <= X(KING_B) && BRD->board[ROOK_B[1]] == -4));
+static void FenReset(void) {
+  BRD_TMP   = BRD_EMPTY;
+  BRD       = &BRD_TMP;
+  WTM       = 1;
+  BRD->epsq = -1;
+  KING_W = KING_B = 0;
+  RESET(ROOK_W);
+  RESET(ROOK_B);
 }
 
 static void Fen(const char *fen) {
-  BRD_2     = BRD_EMPTY;
-  BRD       = &BRD_2;
-  WTM       = 1;
-  BRD->epsq = -1;
-  KING_W    = 0;
-  KING_B    = 0;
-  RESET(ROOK_W);
-  RESET(ROOK_B);
+  FenReset();
   FenCreate(fen);
   BuildBitboards();
-  AssumeLegalPosition();
+  Assert(PopCount(BRD->white[5]) == 1 && PopCount(BRD->black[5]) == 1, "Error #2: Bad fen");
 }
 
 // Checks
 
-static bool ChecksHereW(const int pos) {
+static inline bool ChecksHereW(const int square) {
   const uint64_t both = BOTH();
-  return ((PAWN_CHECKS_B[pos]            & BRD->white[0])                 |
-          (KNIGHT_MOVES[pos]             & BRD->white[1])                 |
-          (BishopMagicMoves(pos, both) & (BRD->white[2] | BRD->white[4])) |
-          (RookMagicMoves(pos, both)   & (BRD->white[3] | BRD->white[4])) |
-          (KING_MOVES[pos]               & BRD->white[5]));
+  return ((PAWN_CHECKS_B[square]          &  BRD->white[0])                  |
+          (KNIGHT_MOVES[square]           &  BRD->white[1])                  |
+          (BishopMagicMoves(square, both) & (BRD->white[2] | BRD->white[4])) |
+          (RookMagicMoves(square, both)   & (BRD->white[3] | BRD->white[4])) |
+          (KING_MOVES[square]             &  BRD->white[5]));
 }
 
-static bool ChecksHereB(const int pos) {
+static inline bool ChecksHereB(const int square) {
   const uint64_t both = BOTH();
-  return ((PAWN_CHECKS_W[pos]            & BRD->black[0])                 |
-          (KNIGHT_MOVES[pos]             & BRD->black[1])                 |
-          (BishopMagicMoves(pos, both) & (BRD->black[2] | BRD->black[4])) |
-          (RookMagicMoves(pos, both)   & (BRD->black[3] | BRD->black[4])) |
-          (KING_MOVES[pos]               & BRD->black[5]));
+  return ((PAWN_CHECKS_W[square]          &  BRD->black[0])                  |
+          (KNIGHT_MOVES[square]           &  BRD->black[1])                  |
+          (BishopMagicMoves(square, both) & (BRD->black[2] | BRD->black[4])) |
+          (RookMagicMoves(square, both)   & (BRD->black[3] | BRD->black[4])) |
+          (KING_MOVES[square]             &  BRD->black[5]));
 }
 
-static bool ChecksCastleW(uint64_t squares) {
-  for (; squares; squares = ClearBit(squares)) if (ChecksHereW(Lsb(squares))) return 1;
-  return 0;
+static bool ChecksCastleW(uint64_t squares) {for (; squares; squares = ClearBit(squares)) if (ChecksHereW(Lsb(squares))) return 1; return 0;}
+static bool ChecksCastleB(uint64_t squares) {for (; squares; squares = ClearBit(squares)) if (ChecksHereB(Lsb(squares))) return 1; return 0;}
+static bool ChecksW(void) {return ChecksHereW(Lsb(BRD->black[5]));}
+static bool ChecksB(void) {return ChecksHereB(Lsb(BRD->white[5]));}
+
+// Move generator
+
+#if defined PEXT
+static inline uint32_t Pext(const uint64_t occupied, const uint64_t mask) {return _pext_u64(occupied, mask);}
+static inline uint64_t BishopMagicMoves(const int square, const uint64_t occupied) {return BISHOP_MAGIC_MOVES[square][Pext(occupied, BISHOP_MASK[square])];}
+static inline uint64_t RookMagicMoves(const int square, const uint64_t occupied)   {return ROOK_MAGIC_MOVES[  square][Pext(occupied, ROOK_MASK[square])];}
+#else
+static const uint64_t
+  ROOK_MAGIC[64] = {
+    0x548001400080106cULL,0x900184000110820ULL,0x428004200a81080ULL,0x140088082000c40ULL,0x1480020800011400ULL,0x100008804085201ULL,0x2a40220001048140ULL,0x50000810000482aULL,
+    0x250020100020a004ULL,0x3101880100900a00ULL,0x200a040a00082002ULL,0x1004300044032084ULL,0x2100408001013ULL,0x21f00440122083ULL,0xa204280406023040ULL,0x2241801020800041ULL,
+    0xe10100800208004ULL,0x2010401410080ULL,0x181482000208805ULL,0x4080101000021c00ULL,0xa250210012080022ULL,0x4210641044000827ULL,0x8081a02300d4010ULL,0x8008012000410001ULL,
+    0x28c0822120108100ULL,0x500160020aa005ULL,0xc11050088c1000ULL,0x48c00101000a288ULL,0x494a184408028200ULL,0x20880100240006ULL,0x10b4010200081ULL,0x40a200260000490cULL,
+    0x22384003800050ULL,0x7102001a008010ULL,0x80020c8010900c0ULL,0x100204082a001060ULL,0x8000118188800428ULL,0x58e0020009140244ULL,0x100145040040188dULL,0x44120220400980ULL,
+    0x114001007a00800ULL,0x80a0100516304000ULL,0x7200301488001000ULL,0x1000151040808018ULL,0x3000a200010e0020ULL,0x1000849180802810ULL,0x829100210208080ULL,0x1004050021528004ULL,
+    0x61482000c41820b0ULL,0x241001018a401a4ULL,0x45020c009cc04040ULL,0x308210c020081200ULL,0xa000215040040ULL,0x10a6024001928700ULL,0x42c204800c804408ULL,0x30441a28614200ULL,
+    0x40100229080420aULL,0x9801084000201103ULL,0x8408622090484202ULL,0x4022001048a0e2ULL,0x280120020049902ULL,0x1200412602009402ULL,0x914900048020884ULL,0x104824281002402ULL},
+  BISHOP_MAGIC[64] = {
+    0x2890208600480830ULL,0x324148050f087ULL,0x1402488a86402004ULL,0xc2210a1100044bULL,0x88450040b021110cULL,0xc0407240011ULL,0xd0246940cc101681ULL,0x1022840c2e410060ULL,
+    0x4a1804309028d00bULL,0x821880304a2c0ULL,0x134088090100280ULL,0x8102183814c0208ULL,0x518598604083202ULL,0x67104040408690ULL,0x1010040020d000ULL,0x600001028911902ULL,
+    0x8810183800c504c4ULL,0x2628200121054640ULL,0x28003000102006ULL,0x4100c204842244ULL,0x1221c50102421430ULL,0x80109046e0844002ULL,0xc128600019010400ULL,0x812218030404c38ULL,
+    0x1224152461091c00ULL,0x1c820008124000aULL,0xa004868015010400ULL,0x34c080004202040ULL,0x200100312100c001ULL,0x4030048118314100ULL,0x410000090018ULL,0x142c010480801ULL,
+    0x8080841c1d004262ULL,0x81440f004060406ULL,0x400a090008202ULL,0x2204020084280080ULL,0xb820060400008028ULL,0x110041840112010ULL,0x8002080a1c84400ULL,0x212100111040204aULL,
+    0x9412118200481012ULL,0x804105002001444cULL,0x103001280823000ULL,0x40088e028080300ULL,0x51020d8080246601ULL,0x4a0a100e0804502aULL,0x5042028328010ULL,0xe000808180020200ULL,
+    0x1002020620608101ULL,0x1108300804090c00ULL,0x180404848840841ULL,0x100180040ac80040ULL,0x20840000c1424001ULL,0x82c00400108800ULL,0x28c0493811082aULL,0x214980910400080cULL,
+    0x8d1a0210b0c000ULL,0x164c500ca0410cULL,0xc6040804283004ULL,0x14808001a040400ULL,0x180450800222a011ULL,0x600014600490202ULL,0x21040100d903ULL,0x10404821000420ULL};
+static inline uint64_t BishopMagicIndex(const int square, const uint64_t mask) {return ((mask & BISHOP_MASK[square]) * BISHOP_MAGIC[square]) >> 55;}
+static inline uint64_t RookMagicIndex(const int square, const uint64_t mask)   {return ((mask & ROOK_MASK[square]) * ROOK_MAGIC[square]) >> 52;}
+static inline uint64_t BishopMagicMoves(const int square, const uint64_t mask) {return BISHOP_MAGIC_MOVES[square][BishopMagicIndex(square, mask)];}
+static inline uint64_t RookMagicMoves(const int square, const uint64_t mask)   {return ROOK_MAGIC_MOVES[square][RookMagicIndex(square, mask)];}
+#endif
+
+static void HandleCastlingW() {
+  MGEN_MOVES[MGEN_MOVES_N] = *BRD;
+  BRD          = &MGEN_MOVES[MGEN_MOVES_N];
+  BRD->epsq    = -1;
+  BRD->castle &= 4 | 8;
 }
 
-static bool ChecksCastleB(uint64_t squares) {
-  for (; squares; squares = ClearBit(squares)) if (ChecksHereB(Lsb(squares))) return 1;
-  return 0;
-}
-
-static bool ChecksW() {
-  return ChecksHereW(Lsb(BRD->black[5]));
-}
-
-static bool ChecksB() {
-  return ChecksHereB(Lsb(BRD->white[5]));
-}
-
-// Mgen
-
-static uint64_t BishopMagicIndex(const int position, const uint64_t mask) {
-  return ((mask & BISHOP_MASK[position]) * BISHOP_MAGIC[position]) >> 55;
-}
-
-static uint64_t RookMagicIndex(const int position, const uint64_t mask) {
-  return ((mask & ROOK_MASK[position]) * ROOK_MAGIC[position]) >> 52;
-}
-
-static uint64_t BishopMagicMoves(const int position, const uint64_t mask) {
-  return BISHOP_MAGIC_MOVES[position][BishopMagicIndex(position, mask)];
-}
-
-static uint64_t RookMagicMoves(const int position, const uint64_t mask) {
-  return ROOK_MAGIC_MOVES[position][RookMagicIndex(position, mask)];
-}
-
-static void AddCastleOOW() {
+static void AddCastleOOW(void) {
   if (ChecksCastleB(CASTLE_W[0])) return;
-  MOVES[MOVES_N] = *BRD;
-  BRD                    = &MOVES[MOVES_N];
-  BRD->epsq              = -1;
-  BRD->castle           &= 4 | 8;
-  BRD->board[ROOK_W[0]]  = 0;
-  BRD->board[KING_W]     = 0;
-  BRD->board[5]          = 4;
-  BRD->board[6]          = 6;
-  BRD->white[3]         ^= Bit(ROOK_W[0]);
-  BRD->white[5]         ^= Bit(KING_W);
-  BRD->white[3]         |= Bit(5);
-  BRD->white[5]         |= Bit(6);
+  HandleCastlingW();
+  BRD->board[ROOK_W[0]] = 0;
+  BRD->board[KING_W]    = 0;
+  BRD->board[5]         = 4;
+  BRD->board[6]         = 6;
+  BRD->white[3]         = (BRD->white[3] ^ Bit(ROOK_W[0])) | Bit(5);
+  BRD->white[5]         = (BRD->white[5] ^ Bit(KING_W))    | Bit(6);
   if (ChecksB()) return;
-  MOVES_N++;
+  MGEN_MOVES_N++;
 }
 
-static void AddCastleOOOW() {
+static void AddCastleOOOW(void) {
   if (ChecksCastleB(CASTLE_W[1])) return;
-  MOVES[MOVES_N] = *BRD;
-  BRD                    = &MOVES[MOVES_N];
-  BRD->epsq              = -1;
-  BRD->castle           &= 4 | 8;
-  BRD->board[ROOK_W[1]]  = 0;
-  BRD->board[KING_W]     = 0;
-  BRD->board[3]          = 4;
-  BRD->board[2]          = 6;
-  BRD->white[3]         ^= Bit(ROOK_W[1]);
-  BRD->white[5]         ^= Bit(KING_W);
-  BRD->white[3]         |= Bit(3);
-  BRD->white[5]         |= Bit(2);
+  HandleCastlingW();
+  BRD->board[ROOK_W[1]] = 0;
+  BRD->board[KING_W]    = 0;
+  BRD->board[3]         = 4;
+  BRD->board[2]         = 6;
+  BRD->white[3]         = (BRD->white[3] ^ Bit(ROOK_W[1])) | Bit(3);
+  BRD->white[5]         = (BRD->white[5] ^ Bit(KING_W))    | Bit(2);
   if (ChecksB()) return;
-  MOVES_N++;
+  MGEN_MOVES_N++;
 }
 
-static void MgenCastleMovesW() {
+static void MgenCastlingMovesW(void) {
   if ((BRD->castle & 1) && !(CASTLE_EMPTY_W[0] & MGEN_BOTH)) {AddCastleOOW();  BRD = BRD_ORIGINAL;}
   if ((BRD->castle & 2) && !(CASTLE_EMPTY_W[1] & MGEN_BOTH)) {AddCastleOOOW(); BRD = BRD_ORIGINAL;}
 }
 
-static void AddCastleOOB() {
+static void HandleCastlingB() {
+  MGEN_MOVES[MGEN_MOVES_N] = *BRD;
+  BRD          = &MGEN_MOVES[MGEN_MOVES_N];
+  BRD->epsq    = -1;
+  BRD->castle &= 1 | 2;
+}
+
+static void AddCastleOOB(void) {
   if (ChecksCastleW(CASTLE_B[0])) return;
-  MOVES[MOVES_N] = *BRD;
-  BRD = &MOVES[MOVES_N];
-  BRD->epsq              = -1;
-  BRD->castle           &= 1 | 2;
-  BRD->board[ROOK_B[0]]  = 0;
-  BRD->board[KING_B]     = 0;
-  BRD->board[56 + 5]     = -4;
-  BRD->board[56 + 6]     = -6;
-  BRD->black[3]         ^= Bit(ROOK_B[0]);
-  BRD->black[5]         ^= Bit(KING_B);
-  BRD->black[3]         |= Bit(56 + 5);
-  BRD->black[5]         |= Bit(56 + 6);
+  HandleCastlingB();
+  BRD->board[ROOK_B[0]] = 0;
+  BRD->board[KING_B]    = 0;
+  BRD->board[56 + 5]    = -4;
+  BRD->board[56 + 6]    = -6;
+  BRD->black[3]         = (BRD->black[3] ^ Bit(ROOK_B[0])) | Bit(56 + 5);
+  BRD->black[5]         = (BRD->black[5] ^ Bit(KING_B))    | Bit(56 + 6);
   if (ChecksW()) return;
-  MOVES_N++;
+  MGEN_MOVES_N++;
 }
 
-static void AddCastleOOOB() {
+static void AddCastleOOOB(void) {
   if (ChecksCastleW(CASTLE_B[1])) return;
-  MOVES[MOVES_N] = *BRD;
-  BRD = &MOVES[MOVES_N];
-  BRD->epsq              = -1;
-  BRD->castle           &= 1 | 2;
-  BRD->board[ROOK_B[1]]  = 0;
-  BRD->board[KING_B]     = 0;
-  BRD->board[56 + 3]     = -4;
-  BRD->board[56 + 2]     = -6;
-  BRD->black[3]         ^= Bit(ROOK_B[1]);
-  BRD->black[5]         ^= Bit(KING_B);
-  BRD->black[3]         |= Bit(56 + 3);
-  BRD->black[5]         |= Bit(56 + 2);
+  HandleCastlingB();
+  BRD->board[ROOK_B[1]] = 0;
+  BRD->board[KING_B]    = 0;
+  BRD->board[56 + 3]    = -4;
+  BRD->board[56 + 2]    = -6;
+  BRD->black[3]         = (BRD->black[3] ^ Bit(ROOK_B[1])) | Bit(56 + 3);
+  BRD->black[5]         = (BRD->black[5] ^ Bit(KING_B))    | Bit(56 + 2);
   if (ChecksW()) return;
-  MOVES_N++;
+  MGEN_MOVES_N++;
 }
 
-static void MgenCastleMovesB() {
+static void MgenCastlingMovesB(void) {
   if ((BRD->castle & 4) && !(CASTLE_EMPTY_B[0] & MGEN_BOTH)) {AddCastleOOB();  BRD = BRD_ORIGINAL;}
   if ((BRD->castle & 8) && !(CASTLE_EMPTY_B[1] & MGEN_BOTH)) {AddCastleOOOB(); BRD = BRD_ORIGINAL;}
 }
 
-static void CheckCastleRightsW() {
+static void CheckCastlingRightsW(void) {
   if (BRD->board[KING_W]    != 6) {BRD->castle &= 4 | 8; return;}
   if (BRD->board[ROOK_W[0]] != 4)  BRD->castle &= 2 | 4 | 8;
   if (BRD->board[ROOK_W[1]] != 4)  BRD->castle &= 1 | 4 | 8;
 }
 
-static void CheckCastleRightsB() {
+static void CheckCastlingRightsB(void) {
   if (BRD->board[KING_B]    != -6) {BRD->castle &= 1 | 2; return;}
   if (BRD->board[ROOK_B[0]] != -4)  BRD->castle &= 1 | 2 | 8;
   if (BRD->board[ROOK_B[1]] != -4)  BRD->castle &= 1 | 2 | 4;
 }
 
-static void HandleCastleRights() {
+static void HandleCastlingRights(void) {
   if (!BRD->castle) return;
-  CheckCastleRightsW();
-  CheckCastleRightsB();
+  CheckCastlingRightsW();
+  CheckCastlingRightsB();
 }
 
 static void ModifyPawnStuffW(const int from, const int to) {
   if (to == BRD_ORIGINAL->epsq) {
-    BRD->board[to - 8]  = 0;
-    BRD->black[0]      ^= Bit(to - 8);
+    BRD->board[to - 8] = 0;
+    BRD->black[0]     ^= Bit(to - 8);
   } else if (Y(to) - Y(from) == 2) {
-    BRD->epsq = (char)(to - 8);
+    BRD->epsq = to - 8;
   }
 }
 
 static void AddPromotionW(const int from, const int to, const int piece) {
   const int eat = BRD->board[to];
-  MOVES[MOVES_N] = *BRD;
-  BRD = &MOVES[MOVES_N];
-  BRD->epsq         = -1;
-  BRD->board[to]    = piece;
-  BRD->board[from]  = 0;
-  BRD->white[0]    ^= Bit(from);
+  MGEN_MOVES[MGEN_MOVES_N] = *BRD;
+  BRD = &MGEN_MOVES[MGEN_MOVES_N];
+  BRD->epsq        = -1;
+  BRD->board[to]   = piece;
+  BRD->board[from] = 0;
+  BRD->white[0]   ^= Bit(from);
   BRD->white[piece - 1] |= Bit(to);
-  if (eat) BRD->black[-eat - 1] ^= Bit(to);
+  if (eat <= -1) BRD->black[-eat - 1] ^= Bit(to);
   if (ChecksB()) return;
-  HandleCastleRights();
-  MOVES_N++;
+  HandleCastlingRights();
+  MGEN_MOVES_N++;
+}
+
+static void AddPromotionStuffW(const int from, const int to) {
+  BOARD_T *tmp = BRD;
+  for (int piece = 2; piece <= 5; piece++) { // =qnrb
+    AddPromotionW(from, to, piece);
+    BRD = tmp;
+  }
 }
 
 static void AddNormalStuffW(const int from, const int to) {
   const int me = BRD->board[from], eat = BRD->board[to];
-  MOVES[MOVES_N] = *BRD;
-  BRD = &MOVES[MOVES_N];
-  BRD->epsq           = -1;
-  BRD->board[from]    = 0;
-  BRD->board[to]      = me;
-  BRD->white[me - 1] ^= Bit(from);
-  BRD->white[me - 1] |= Bit(to);
-  if (eat)
-    BRD->black[-eat - 1] ^= Bit(to);
+  if (me <= 0) return;
+  MGEN_MOVES[MGEN_MOVES_N] = *BRD;
+  BRD = &MGEN_MOVES[MGEN_MOVES_N];
+  BRD->epsq          = -1;
+  BRD->board[from]   = 0;
+  BRD->board[to]     = me;
+  BRD->white[me - 1] = (BRD->white[me - 1] ^ Bit(from)) | Bit(to);
+  if (eat <= -1) BRD->black[-eat - 1] ^= Bit(to);
   if (BRD->board[to] == 1) ModifyPawnStuffW(from, to);
   if (ChecksB()) return;
-  HandleCastleRights();
-  MOVES_N++;
-}
-
-static void AddPromotionStuffW(const int from, const int to) {
-  BOARD_T *board = BRD;
-  for (int piece = 2; piece <= 5; piece++) {AddPromotionW(from, to, piece); BRD = board;}
+  HandleCastlingRights();
+  MGEN_MOVES_N++;
 }
 
 static void AddW(const int from, const int to) {
@@ -686,8 +575,8 @@ static void AddW(const int from, const int to) {
 
 static void ModifyPawnStuffB(const int from, const int to) {
   if (to == BRD_ORIGINAL->epsq) {
-    BRD->board[to + 8]  = 0;
-    BRD->white[0]      ^= Bit(to + 8);
+    BRD->board[to + 8] = 0;
+    BRD->white[0]     ^= Bit(to + 8);
   } else if (Y(to) - Y(from) == -2) {
     BRD->epsq = to + 8;
   }
@@ -695,39 +584,41 @@ static void ModifyPawnStuffB(const int from, const int to) {
 
 static void AddNormalStuffB(const int from, const int to) {
   const int me = BRD->board[from], eat = BRD->board[to];
-  MOVES[MOVES_N] = *BRD;
-  BRD                  = &MOVES[MOVES_N];
-  BRD->epsq            = -1;
-  BRD->board[to]       = me;
-  BRD->board[from]     = 0;
-  BRD->black[-me - 1] ^= Bit(from);
-  BRD->black[-me - 1] |= Bit(to);
-  if (eat)
-    BRD->white[eat - 1] ^= Bit(to);
+  if (me >= 0) return;
+  MGEN_MOVES[MGEN_MOVES_N] = *BRD;
+  BRD                 = &MGEN_MOVES[MGEN_MOVES_N];
+  BRD->epsq           = -1;
+  BRD->board[to]      = me;
+  BRD->board[from]    = 0;
+  BRD->black[-me - 1] = (BRD->black[-me - 1] ^ Bit(from)) | Bit(to);
+  if (eat >= 1) BRD->white[eat - 1] ^= Bit(to);
   if (BRD->board[to] == -1) ModifyPawnStuffB(from, to);
   if (ChecksW()) return;
-  HandleCastleRights();
-  MOVES_N++;
+  HandleCastlingRights();
+  MGEN_MOVES_N++;
 }
 
 static void AddPromotionB(const int from, const int to, const int piece) {
   const int eat = BRD->board[to];
-  MOVES[MOVES_N] = *BRD;
-  BRD = &MOVES[MOVES_N];
-  BRD->epsq         = -1;
-  BRD->board[from]  = 0;
-  BRD->board[to]    = piece;
-  BRD->black[0]    ^= Bit(from);
+  MGEN_MOVES[MGEN_MOVES_N] = *BRD;
+  BRD = &MGEN_MOVES[MGEN_MOVES_N];
+  BRD->epsq        = -1;
+  BRD->board[from] = 0;
+  BRD->board[to]   = piece;
+  BRD->black[0]   ^= Bit(from);
   BRD->black[-piece - 1] |= Bit(to);
-  if (eat) BRD->white[eat - 1] ^= Bit(to);
+  if (eat >= 1) BRD->white[eat - 1] ^= Bit(to);
   if (ChecksW()) return;
-  HandleCastleRights();
-  MOVES_N++;
+  HandleCastlingRights();
+  MGEN_MOVES_N++;
 }
 
 static void AddPromotionStuffB(const int from, const int to) {
-  BOARD_T *board = BRD;
-  for (int piece = 2; piece <= 5; piece++) {AddPromotionB(from, to, -piece); BRD = board;}
+  BOARD_T *tmp = BRD;
+  for (int piece = 2; piece <= 5; piece++) {
+    AddPromotionB(from, to, -piece);
+    BRD = tmp;
+  }
 }
 
 static void AddB(const int from, const int to) {
@@ -751,83 +642,99 @@ static void AddMovesB(const int from, uint64_t moves) {
   }
 }
 
-static void MgenSetupW() {
+static void MgenSetupW(void) {
   MGEN_WHITE   = WHITE();
   MGEN_BLACK   = BLACK();
   MGEN_BOTH    = MGEN_WHITE | MGEN_BLACK;
   MGEN_EMPTY   = ~MGEN_BOTH;
-  MGEN_PAWN_SQ = BRD->epsq > 0 ? (MGEN_BLACK | (Bit(BRD->epsq) & 0x0000FF0000000000ULL)) : MGEN_BLACK;
+  MGEN_PAWN_SQ = BRD->epsq > 0 ? MGEN_BLACK | (Bit(BRD->epsq) & 0x0000FF0000000000ULL) : MGEN_BLACK;
 }
 
-static void MgenSetupB() {
+static void MgenSetupB(void) {
   MGEN_WHITE   = WHITE();
   MGEN_BLACK   = BLACK();
   MGEN_BOTH    = MGEN_WHITE | MGEN_BLACK;
   MGEN_EMPTY   = ~MGEN_BOTH;
-  MGEN_PAWN_SQ = BRD->epsq > 0 ? (MGEN_WHITE | (Bit(BRD->epsq) & 0x0000000000FF0000ULL)) : MGEN_WHITE;
+  MGEN_PAWN_SQ = BRD->epsq > 0 ? MGEN_WHITE | (Bit(BRD->epsq) & 0x0000000000FF0000ULL) : MGEN_WHITE;
 }
 
-#define FORLOOP(mypieces) for (uint64_t pieces = mypieces; pieces; pieces = ClearBit(pieces))
-
-static void MgenPawnsW() {
-  FORLOOP(BRD->white[0]) {
-    const int pos = Lsb(pieces);
-    AddMovesW(pos, PAWN_CHECKS_W[pos] & MGEN_PAWN_SQ);
-    if (Y(pos) == 1) {
-      if (PAWN_1_MOVES_W[pos] & MGEN_EMPTY) AddMovesW(pos, PAWN_2_MOVES_W[pos] & MGEN_EMPTY);
+static void MgenPawnsW(void) {
+  for (uint64_t pieces = BRD->white[0]; pieces; pieces = ClearBit(pieces)) {
+    const int sq = Lsb(pieces);
+    AddMovesW(sq, PAWN_CHECKS_W[sq] & MGEN_PAWN_SQ);
+    if (Y(sq) == 1) {
+      if (PAWN_1_MOVES_W[sq] & MGEN_EMPTY) AddMovesW(sq, PAWN_2_MOVES_W[sq] & MGEN_EMPTY);
     } else {
-      AddMovesW(pos, PAWN_1_MOVES_W[pos] & MGEN_EMPTY);
+      AddMovesW(sq, PAWN_1_MOVES_W[sq] & MGEN_EMPTY);
     }
   }
 }
 
-static void MgenPawnsB() {
-  FORLOOP(BRD->black[0]) {
-    const int pos = Lsb(pieces);
-    AddMovesB(pos, PAWN_CHECKS_B[pos] & MGEN_PAWN_SQ);
-    if (Y(pos) == 6) {
-      if (PAWN_1_MOVES_B[pos] & MGEN_EMPTY) AddMovesB(pos, PAWN_2_MOVES_B[pos] & MGEN_EMPTY);
+static void MgenPawnsB(void) {
+  for (uint64_t pieces = BRD->black[0]; pieces; pieces = ClearBit(pieces)) {
+    const int sq = Lsb(pieces);
+    AddMovesB(sq, PAWN_CHECKS_B[sq] & MGEN_PAWN_SQ);
+    if (Y(sq) == 6) {
+      if (PAWN_1_MOVES_B[sq] & MGEN_EMPTY) AddMovesB(sq, PAWN_2_MOVES_B[sq] & MGEN_EMPTY);
     } else {
-      AddMovesB(pos, PAWN_1_MOVES_B[pos] & MGEN_EMPTY);
+      AddMovesB(sq, PAWN_1_MOVES_B[sq] & MGEN_EMPTY);
     }
   }
 }
 
-static void MgenKnightsW() {
-  FORLOOP(BRD->white[1]) {const int pos = Lsb(pieces); AddMovesW(pos, KNIGHT_MOVES[pos] & MGEN_GOOD);}
+static void MgenKnightsW(void) {
+  for (uint64_t pieces = BRD->white[1]; pieces; pieces = ClearBit(pieces)) {
+    const int sq = Lsb(pieces);
+    AddMovesW(sq, KNIGHT_MOVES[sq] & MGEN_GOOD);
+  }
 }
 
-static void MgenKnightsB() {
-  FORLOOP(BRD->black[1]) {const int pos = Lsb(pieces); AddMovesB(pos, KNIGHT_MOVES[pos] & MGEN_GOOD);}
+static void MgenKnightsB(void) {
+  for (uint64_t pieces = BRD->black[1]; pieces; pieces = ClearBit(pieces)) {
+    const int sq = Lsb(pieces);
+    AddMovesB(sq, KNIGHT_MOVES[sq] & MGEN_GOOD);
+  }
 }
 
-static void MgenBishopsPlusQueensW() {
-  FORLOOP(BRD->white[2] | BRD->white[4]) {const int pos = Lsb(pieces); AddMovesW(pos, BishopMagicMoves(pos, MGEN_BOTH) & MGEN_GOOD);}
+static void MgenBishopsPlusQueensW(void) {
+  for (uint64_t pieces = BRD->white[2] | BRD->white[4]; pieces; pieces = ClearBit(pieces)) {
+    const int sq = Lsb(pieces);
+    AddMovesW(sq, BishopMagicMoves(sq, MGEN_BOTH) & MGEN_GOOD);
+  }
 }
 
-static void MgenBishopsPlusQueensB() {
-  FORLOOP(BRD->black[2] | BRD->black[4]) {const int pos = Lsb(pieces); AddMovesB(pos, BishopMagicMoves(pos, MGEN_BOTH) & MGEN_GOOD);}
+static void MgenBishopsPlusQueensB(void) {
+  for (uint64_t pieces = BRD->black[2] | BRD->black[4]; pieces; pieces = ClearBit(pieces)) {
+    const int sq = Lsb(pieces);
+    AddMovesB(sq, BishopMagicMoves(sq, MGEN_BOTH) & MGEN_GOOD);
+  }
 }
 
-static void MgenRooksPlusQueensW() {
-  FORLOOP(BRD->white[3] | BRD->white[4]) {const int pos = Lsb(pieces); AddMovesW(pos, RookMagicMoves(pos, MGEN_BOTH) & MGEN_GOOD);}
+static void MgenRooksPlusQueensW(void) {
+  for (uint64_t pieces = BRD->white[3] | BRD->white[4]; pieces; pieces = ClearBit(pieces)) {
+    const int sq = Lsb(pieces);
+    AddMovesW(sq, RookMagicMoves(sq, MGEN_BOTH) & MGEN_GOOD);
+  }
 }
 
-static void MgenRooksPlusQueensB() {
-  FORLOOP(BRD->black[3] | BRD->black[4]) {const int pos = Lsb(pieces); AddMovesB(pos, RookMagicMoves(pos, MGEN_BOTH) & MGEN_GOOD);}
+static void MgenRooksPlusQueensB(void) {
+  for (uint64_t pieces = BRD->black[3] | BRD->black[4]; pieces; pieces = ClearBit(pieces)) {
+    const int sq = Lsb(pieces);
+    AddMovesB(sq, RookMagicMoves(sq, MGEN_BOTH) & MGEN_GOOD);
+  }
 }
 
-static void MgenKingW() {
-  const int pos = Lsb(BRD->white[5]);
-  AddMovesW(pos, KING_MOVES[pos] & MGEN_GOOD);
+static void MgenKingW(void) {
+  const int sq = Lsb(BRD->white[5]);
+  AddMovesW(sq, KING_MOVES[sq] & MGEN_GOOD);
 }
 
-static void MgenKingB() {
-  const int pos = Lsb(BRD->black[5]);
-  AddMovesB(pos, KING_MOVES[pos] & MGEN_GOOD);
+static void MgenKingB(void) {
+  const int sq = Lsb(BRD->black[5]);
+  AddMovesB(sq, KING_MOVES[sq] & MGEN_GOOD);
 }
 
-static void MgenAllW() {
+static void MgenAllW(void) {
   MgenSetupW();
   MGEN_GOOD = ~MGEN_WHITE;
   MgenPawnsW();
@@ -835,10 +742,10 @@ static void MgenAllW() {
   MgenBishopsPlusQueensW();
   MgenRooksPlusQueensW();
   MgenKingW();
-  MgenCastleMovesW();
+  MgenCastlingMovesW();
 }
 
-static void MgenAllB() {
+static void MgenAllB(void) {
   MgenSetupB();
   MGEN_GOOD = ~MGEN_BLACK;
   MgenPawnsB();
@@ -846,35 +753,26 @@ static void MgenAllB() {
   MgenBishopsPlusQueensB();
   MgenRooksPlusQueensB();
   MgenKingB();
-  MgenCastleMovesB();
+  MgenCastlingMovesB();
 }
 
 static int MgenW(BOARD_T *moves) {
-  MOVES_N = 0;
-  MOVES   = moves;
+  MGEN_MOVES_N = 0;
+  MGEN_MOVES   = moves;
   BRD_ORIGINAL = BRD;
   MgenAllW();
-  return MOVES_N;
+  return MGEN_MOVES_N;
 }
 
 static int MgenB(BOARD_T *moves) {
-  MOVES_N = 0;
-  MOVES   = moves;
+  MGEN_MOVES_N = 0;
+  MGEN_MOVES   = moves;
   BRD_ORIGINAL = BRD;
   MgenAllB();
-  return MOVES_N;
+  return MGEN_MOVES_N;
 }
 
 // Hash
-
-static uint64_t Hash(const int wtm) {
-  uint64_t hash = ZOBRIST_EP[BRD->epsq + 1] ^ ZOBRIST_WTM[wtm] ^ ZOBRIST_CASTLE[BRD->castle];
-  for (uint64_t both = BOTH(); both; both &= both - 1) {
-    const int pos = Lsb(both);
-    hash ^= ZOBRIST_BOARD[BRD->board[pos] + 6][pos];
-  }
-  return hash;
-}
 
 static void HashtableFreeMemory() {
   if (!HASH_SIZE) return;
@@ -898,7 +796,7 @@ static void HashtableSetSize(const int usize) {
   HASH_KEY >>= 1;
   HASH_KEY  -= 1; // 1000b = 8d / - 1d / 0111b = 7d
   HASH       = (HASH_T*) calloc(HASH_COUNT, sizeof(HASH_T));
-  assert(HASH != NULL);
+  Assert(HASH != NULL, "Error # 7: Couldn't allocate space for the hashtable");
 }
 
 // Perft
@@ -973,11 +871,10 @@ static void PerftPrint(const int depth, const uint64_t nodes, const uint64_t ms)
   printf("%20s %11.3f %11.3f\n", big_num, 0.000001 * (double) Nps(nodes, ms), 0.001 * (double) ms);
 }
 
-static void PerftRun(int depth) {
+static void PerftRun(const int depth) {
   uint64_t nodes, start_time, diff_time, totaltime = 0, allnodes = 0;
   Print("[ %s ]", POSITION_FEN);
   Print("Depth               Nodes        Mnps        Time");
-  depth = depth < 1 ? 1 : depth;
   for (int i = 0; i < depth + 1; i++) {
     start_time = Now();
     nodes      = Perft(i);
@@ -1031,119 +928,134 @@ static void Bench(const bool fullsuite) {
   Print("\n=================================================\n");
   Print("                    Nodes        Mnps        Time");
   PerftPrint(-1, nodes, Now() - start);
-  assert((nodes == (fullsuite ? 21799671196 : 561735852)));
-  exit(EXIT_SUCCESS);
+  Assert((nodes == (fullsuite ? 21799671196 : 561735852)), "Error #7: Broken move generator");
 }
 
-// Commands
-
-static void SetFen() {
-  Fen(STARTPOS);
-  POSITION_FEN[0] = '\0';
-  strcpy(POSITION_FEN, TokenCurrent());
-  TokenPop();
-  Fen(POSITION_FEN);
-}
-
-static void Commands() {
-  if (!TOKENS_N) {PrintHelp(); return;}
-  while (TokenOk()) {
-    if (     Token("-help"))    PrintHelp();
-    else if (Token("-version")) Print(NAME);
-    else if (Token("-fen"))     SetFen();
-    else if (Token("-perft"))   PerftRun(TokenInt());
-    else if (Token("-bench"))   Bench(TokenInt());
-    else if (Token("-hash"))    HashtableSetSize(TokenInt());
-    else TokenPop();
-  }
-}
+// CLI
 
 static void PrintHelp() {
   Print("# %s\nGNU General Public License version 3; for details see 'LICENSE'\n", NAME);
-  Print("Usage: lastemperor [COMMAND] [OPTION]? ...");
   Print("> lastemperor -hash 512 -perft 6 # Set 512 MB hash and run perft\n");
-  Print("## LastEmperor Commands");
-  Print("-help         This help");
-  Print("-version      Show Version");
+  Print("## Commands");
+  Print("--help        This help");
+  Print("--version     Show Version");
   Print("-hash [N]     Set hash in N MB");
   Print("-fen [FEN]    Set fen");
   Print("-perft [1..]  Run perft position");
   Print("-bench [01]   Benchmark (0 = normal, 1 = full)\n");
   Print("Full source code here: <https://github.com/SamuraiDangyo/LastEmperor/>");
-  exit(EXIT_SUCCESS);
+}
+
+static void Commands(void) {
+  while (TokenOk()) {
+    if (     Token("--help"))    {PrintHelp(); break;}
+    else if (Token("--version")) {Print(NAME); break;}
+    else if (Token("-hash"))     {HashtableSetSize(TokenInt());}
+    else if (Token("-fen"))      {strcpy(POSITION_FEN, TokenCurrent()); Fen(POSITION_FEN); TokenPop();}
+    else if (Token("-perft"))    {PerftRun(Max(1, TokenInt())); break;}
+    else if (Token("-bench"))    {Bench(TokenInt()); break;}
+    else                         {Print("Unknown Command: '%s'", TokenCurrent()); break;}
+  }
 }
 
 // Init
 
 static uint64_t PermutateBb(const uint64_t moves, const int index) {
   int i, total = 0, good[64] = {0};
-  const int popn = Popcount(moves);
   uint64_t permutations = 0;
   for (i = 0; i < 64; i++)
     if (moves & Bit(i)) {
       good[total] = i;
       total++;
     }
-  for (i = 0; i < popn; i++) if ((1 << i) & index) permutations |= Bit(good[i]);
+  const int popn = PopCount(moves);
+  for (i = 0; i < popn; i++)
+    if ((1 << i) & index)
+      permutations |= Bit(good[i]);
   return permutations & moves;
 }
 
-static uint64_t MakeSliderMagicMoves(const int *slider_vectors, const int pos, const uint64_t moves) {
-  int i, j, x, y;
+static uint64_t MakeSliderMagicMoves(const int *slider_vectors, const int square, const uint64_t moves) {
   uint64_t tmp, possible_moves = 0;
-  const int x_pos = X(pos), y_pos = Y(pos);
-  for (i = 0; i < 4; i++)
-    for (j = 1; j < 8; j++) {
-      x = x_pos + j * slider_vectors[2 * i];
-      y = y_pos + j * slider_vectors[2 * i + 1];
+  const int x_square = X(square), y_square = Y(square);
+  for (int i = 0; i < 4; i++)
+    for (int j = 1; j < 8; j++) {
+      const int x = x_square + j * slider_vectors[2 * i], y = y_square + j * slider_vectors[2 * i + 1];
       if (!OnBoard(x, y)) break;
       tmp             = Bit(8 * y + x);
       possible_moves |= tmp;
       if (tmp & moves) break;
     }
-  return possible_moves & (~Bit(pos));
+  return possible_moves & (~Bit(square));
 }
 
-static void InitBishopMagics() {
-  const int bishop_vectors[8] = {1,1,-1,-1,1,-1,-1,1};
+static void InitBishopMagics(void) {
   for (int i = 0; i < 64; i++) {
     const uint64_t magics = BISHOP_MOVE_MAGICS[i] & (~Bit(i));
     for (int j = 0; j < 512; j++) {
       const uint64_t allmoves = PermutateBb(magics, j);
-      BISHOP_MAGIC_MOVES[i][BishopMagicIndex(i, allmoves)] = MakeSliderMagicMoves(bishop_vectors, i, allmoves);
+#if defined PEXT
+      BISHOP_MAGIC_MOVES[i][Pext(allmoves, BISHOP_MASK[i])] = MakeSliderMagicMoves(BISHOP_VECTORS, i, allmoves);
+#else
+      BISHOP_MAGIC_MOVES[i][BishopMagicIndex(i, allmoves)] = MakeSliderMagicMoves(BISHOP_VECTORS, i, allmoves);
+#endif
     }
   }
 }
 
-static void InitRookMagics() {
-  int i, j;
-  const int rook_vectors[8] = {1,0,0,1,0,-1,-1,0};
-  for (i = 0; i < 64; i++) {
+static void InitRookMagics(void) {
+  for (int i = 0; i < 64; i++) {
     const uint64_t magics = ROOK_MOVE_MAGICS[i] & (~Bit(i));
-    for (j = 0; j < 4096; j++) {
+    for (int j = 0; j < 4096; j++) {
       const uint64_t allmoves = PermutateBb(magics, j);
-      ROOK_MAGIC_MOVES[i][RookMagicIndex(i, allmoves)] = MakeSliderMagicMoves(rook_vectors, i, allmoves);
+#if defined PEXT
+      ROOK_MAGIC_MOVES[i][Pext(allmoves, ROOK_MASK[i])] = MakeSliderMagicMoves(ROOK_VECTORS, i, allmoves);
+#else
+      ROOK_MAGIC_MOVES[i][RookMagicIndex(i, allmoves)] = MakeSliderMagicMoves(ROOK_VECTORS, i, allmoves);
+#endif
     }
   }
 }
 
-static uint64_t MakeJumpMoves(const int pos, const int len, const int dy, const int *jump_vectors) {
+static uint64_t MakeSliderMoves(const int square, const int *slider_vectors) {
   uint64_t moves = 0;
-  const int x_pos = X(pos), y_pos = Y(pos);
+  const int x_square = X(square), y_square = Y(square);
+  for (int i = 0; i < 4; i++) {
+    const int dx = slider_vectors[2 * i], dy = slider_vectors[2 * i + 1];
+    uint64_t tmp = 0;
+    for (int j = 1; j < 8; j++) {
+      const int x = x_square + j * dx, y = y_square + j * dy;
+      if (!OnBoard(x, y)) break;
+      tmp |= Bit(8 * y + x);
+    }
+    moves |= tmp;
+  }
+  return moves;
+}
+
+static void InitSliderMoves(void) {
+  for (int i = 0; i < 64; i++) {
+    ROOK_MOVES[i]   = MakeSliderMoves(i, ROOK_VECTORS);
+    BISHOP_MOVES[i] = MakeSliderMoves(i, BISHOP_VECTORS);
+    QUEEN_MOVES[i]  = ROOK_MOVES[i] | BISHOP_MOVES[i];
+  }
+}
+
+static uint64_t MakeJumpMoves(const int square, const int len, const int dy, const int *jump_vectors) {
+  uint64_t moves = 0;
+  const int x_square = X(square), y_square = Y(square);
   for (int i = 0; i < len; i++) {
-    int x = x_pos + jump_vectors[2 * i];
-    int y = y_pos + dy * jump_vectors[2 * i + 1];
+    const int x = x_square + jump_vectors[2 * i], y = y_square + dy * jump_vectors[2 * i + 1];
     if (OnBoard(x, y)) moves |= Bit(8 * y + x);
   }
   return moves;
 }
 
-static void InitJumpMoves() {
-  const int king_vectors[2 * 8] = {1,0,0,1,0,-1,-1,0,1,1,-1,-1,1,-1,-1,1}, knight_vectors[2 * 8] = {2,1,-2,1,2,-1,-2,-1,1,2,-1,2,1,-2,-1,-2},
-            pawn_check_vectors[2 * 2] = {-1,1,1,1}, pawn_1_vectors[1 * 2] = {0,1};
+static void InitJumpMoves(void) {
+  const int pawn_check_vectors[2 * 2] = {-1,1,1,1}, pawn_1_vectors[1 * 2] = {0,1};
   for (int i = 0; i < 64; i++) {
-    KING_MOVES[i]     = MakeJumpMoves(i, 8,  1, king_vectors);
-    KNIGHT_MOVES[i]   = MakeJumpMoves(i, 8,  1, knight_vectors);
+    KING_MOVES[i]     = MakeJumpMoves(i, 8,  1, KING_VECTORS);
+    KNIGHT_MOVES[i]   = MakeJumpMoves(i, 8,  1, KNIGHT_VECTORS);
     PAWN_CHECKS_W[i]  = MakeJumpMoves(i, 2,  1, pawn_check_vectors);
     PAWN_CHECKS_B[i]  = MakeJumpMoves(i, 2, -1, pawn_check_vectors);
     PAWN_1_MOVES_W[i] = MakeJumpMoves(i, 1,  1, pawn_1_vectors);
@@ -1155,29 +1067,30 @@ static void InitJumpMoves() {
   }
 }
 
-static void InitZobrist() {
+static void InitZobrist(void) {
   int i, j;
-  for (i = 0; i < 13; i++) for (j = 0; j < 64; j++) ZOBRIST_BOARD[i][j] = RandomUint64T();
-  for (i = 0; i < 64; i++) ZOBRIST_EP[i]     = RandomUint64T();
-  for (i = 0; i < 16; i++) ZOBRIST_CASTLE[i] = RandomUint64T();
-  for (i = 0; i <  2; i++) ZOBRIST_WTM[i]    = RandomUint64T();
+  for (i = 0; i < 13; i++) for (j = 0; j < 64; j++) ZOBRIST_BOARD[i][j] = Random8x64();
+  for (i = 0; i < 64; i++) ZOBRIST_EP[i]     = Random8x64();
+  for (i = 0; i < 16; i++) ZOBRIST_CASTLE[i] = Random8x64();
+  for (i = 0; i <  2; i++) ZOBRIST_WTM[i]    = Random8x64();
 }
 
-static void Init() {
+static void Init(void) {
   RANDOM_SEED += (uint64_t) time(NULL);
   InitZobrist();
   InitBishopMagics();
   InitRookMagics();
+  InitSliderMoves();
   InitJumpMoves();
   HashtableSetSize(256);
   Fen(STARTPOS);
 }
 
-// "Si vis pacem, para bellum" -- Plato, The Laws of Plato
+// "Wisdom begins in wonder." -- Socrates
 int main(int argc, char **argv) {
   for (int i = 1; i < argc; i++) TokenAdd(argv[i]);
-  atexit(HashtableFreeMemory);
   Init();
+  atexit(HashtableFreeMemory);
   Commands();
   return EXIT_SUCCESS;
 }
