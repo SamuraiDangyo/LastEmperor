@@ -42,7 +42,7 @@ MyHash::MyHash() {hash = nodes = depth = 0;}
 // Constexpr
 
 constexpr char
-  k_name[] = "LastEmperor 0.51", k_startpos[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - -";
+  k_name[] = "LastEmperor 1.08", k_startpos[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - -";
 
 constexpr int
   k_max_moves = 218, k_rook_vectors[8] = {1,0,0,1,0,-1,-1,0}, k_bishop_vectors[8] = {1,1,-1,-1,1,-1,-1,1}, k_king_vectors[2 * 8] = {1,0,0,1,0,-1,-1,0,1,1,-1,-1,1,-1,-1,1},
