@@ -751,19 +751,20 @@ const std::string BigNumber(const uint64_t number) { // 561735852 -> 561,735,852
 }
 
 double GetNps(const uint64_t nodes, const uint64_t ms) {const double ret = 0.000001 * ((double) Nps(nodes, ms)); return ret < 0.1 ? 0 : ret;}
+double GetTime(const uint64_t ms) {const double ret = (0.001 * ((double) ms)); return ret < 0.001 ? 0 : ret;}
 
 void PerftPrint(const int depth, const uint64_t nodes, const uint64_t ms) {
-  std::cout << std::setfill(' ') << std::setprecision(6) << depth << std::setw(18) << BigNumber(nodes) << std::setw(14) << GetNps(nodes, ms) << std::setw(12) << (0.001 * ((double) ms)) << std::endl;
+  std::cout << std::setfill(' ') << std::setprecision(6) << depth << std::setw(18 - (depth > 9 ? 1 : 0)) << BigNumber(nodes) << std::setw(14) << GetNps(nodes, ms) << std::setw(12) << GetTime(ms) << std::endl;
 }
 
 void PerftPrintTotal(const uint64_t nodes, const uint64_t ms) {
-  std::cout << std::setfill(' ') << std::setprecision(6) << "Total" << std::setw(14) << BigNumber(nodes) << std::setw(14) << GetNps(nodes, ms) << std::setw(12) << (0.001 * ((double) ms)) << std::endl;
+  std::cout << std::setfill(' ') << std::setprecision(6) << "=" << std::setw(18) << BigNumber(nodes) << std::setw(14) << GetNps(nodes, ms) << std::setw(12) << GetTime(ms) << std::endl;
 }
 
 void PerftRun(const int depth) {
   uint64_t nodes, start_time, diff_time, totaltime = 0, allnodes = 0;
   std::cout << "[ " << g_position << " ]" << std::endl;
-  std::cout << "Depth           Nodes        Mnps        Time" << std::endl;
+  std::cout << "Depth         Nodes          Mnps        Time" << std::endl;
   for (int i = 0; i < depth + 1; i++) {
     Fen(g_position);
     start_time = Now();
@@ -774,13 +775,12 @@ void PerftRun(const int depth) {
     PerftPrint(i, nodes, diff_time);
   }
   std::cout << std::setfill('=') << std::setw(46) << ' ' << std::endl;
-  std::cout << std::setfill(' ') << "               Nodes        Mnps        Time" << std::endl;
   PerftPrintTotal(allnodes, totaltime);
 }
 
 uint64_t SuiteRun(const int depth) {
   uint64_t start, nodes = 0, allnodes = 0;
-  std::cout << "Depth            Nodes        Mnps        Time" << std::endl;
+  std::cout << "Depth          Nodes          Mnps        Time" << std::endl;
   for (int i = 0; i <= depth; i++) {
     Fen(g_position);
     start = Now();
@@ -816,7 +816,7 @@ void Bench(const bool fullsuite) {
     std::cout << "[ #" << nth << ": " << fen << " ]" << std::endl;
     nodes += SuiteRun(fullsuite ? 6 : 5);
   }
-  std::cout << std::setfill('=') << std::setw(46) << '\n' << std::endl;
+  std::cout << '\n' << std::setfill('=') << std::setw(46) << '\n' << std::endl;
   PerftPrintTotal(nodes, Now() - start);
   Assert(nodes == (fullsuite ? 21799671196 : 561735852), "Error #3: Broken move generator");
 }
@@ -961,7 +961,7 @@ void PrintHelp() {
   std::cout << "--version     Show Version" << std::endl;
   std::cout << "-hash=[N]     Set hash in N MB" << std::endl;
   std::cout << "-fen=[FEN]    Set fen" << std::endl;
-  std::cout << "-perft=[1..]  Perft" << std::endl;
+  std::cout << "-perft=[1-99] Perft" << std::endl;
   std::cout << "-bench=[0,1]  Benchmarks [0 = normal, 1 = full]\n" << std::endl;
   std::cout << "Full source: <https://github.com/SamuraiDangyo/LastEmperor/>" << std::endl;
 }
@@ -970,7 +970,7 @@ void Args(int argc, char **argv) {
   std::string tmp;
   if ((tmp = getCmdOption(argc, argv, "-fen=")) != "") {Fen(tmp);}
   if ((tmp = getCmdOption(argc, argv, "-hash=")) != "") {HashtableSetSize(Between<int>(1, std::stoi(tmp), 1024 * 1024));}
-  if ((tmp = getCmdOption(argc, argv, "-perft=")) != "") {PerftRun(std::max(1, std::stoi(tmp))); return;}
+  if ((tmp = getCmdOption(argc, argv, "-perft=")) != "") {PerftRun(Between<int>(1, std::stoi(tmp), 99)); return;}
   if ((tmp = getCmdOption(argc, argv, "-bench=")) != "") {Bench(Between<int>(0, std::stoi(tmp), 1)); return;}
   if (findCmdOption(argc, argv, "--version")) {std::cout << k_name << std::endl; return;}
   if (argc >= 2 && !findCmdOption(argc, argv, "--help")) {std::cout << "Invalid command: '" << std::string(argv[1]) << "'" << std::endl; return;}
