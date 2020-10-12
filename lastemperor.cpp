@@ -16,7 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-// Headers (TODO: get rid of C crap ...)
+// Headers (TODO: get rid off C crap ...)
 
 #include <iostream>
 #include <vector>
@@ -811,9 +811,8 @@ void Bench(const bool fullsuite) {
     "rbqkr1bn/pp1ppp2/2p1n2p/6p1/8/4BPNP/PPPPP1P1/RBQKRN2 w EAea - -"
   };
   for (auto fen : suite) {
-    if (nth) std::cout << std::endl;
+    if (nth++) std::cout << std::endl;
     g_position = fen;
-    nth++;
     std::cout << "[ #" << nth << ": " << fen << " ]" << std::endl;
     nodes += SuiteRun(fullsuite ? 6 : 5);
   }
