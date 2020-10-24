@@ -1,5 +1,5 @@
 /*
-LastEmperor, a Chess960 program
+LastEmperor, Linux Chess960 program
 Copyright (C) 2019-2020 Toni Helminen
 
 This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,9 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <iomanip>
 #include <string.h>
 #include <sys/time.h>
+#if defined PEXT
 #include <immintrin.h>
+#endif
 
 // Namespace
 
@@ -41,8 +43,8 @@ MyHash::MyHash() {hash = nodes = depth = 0;}
 
 // Constexpr
 
-constexpr char
-  k_name[] = "LastEmperor 1.09", k_startpos[] = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - -";
+const std::string
+  k_name = "LastEmperor 1.09", k_startpos = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0";
 
 constexpr int
   k_max_moves = 218, k_rook_vectors[8] = {1,0,0,1,0,-1,-1,0}, k_bishop_vectors[8] = {1,1,-1,-1,1,-1,-1,1}, k_king_vectors[2 * 8] = {1,0,0,1,0,-1,-1,0,1,1,-1,-1,1,-1,-1,1},
@@ -117,16 +119,16 @@ uint64_t BishopMagicMoves(const int, const uint64_t);
 
 // Utils
 
-template <class Type> Type Between(const Type val_a, const Type val_b, const Type val_c) {return std::max(val_a, std::min(val_b, val_c));}
+template <class Type> Type Between(const Type x, const Type y, const Type z) {return std::max(x, std::min(y, z));}
 inline uint8_t Xcoord(const uint64_t bb) {return bb & 7;}
 inline uint8_t Ycoord(const uint64_t bb) {return bb >> 3;}
 uint64_t Nps(const uint64_t nodes, const uint64_t ms) {return (1000 * nodes) / (ms + 1);}
 inline uint64_t ClearBit(const uint64_t bb) {return bb & (bb - 1);}
 inline uint64_t Bit(const int nbits) {return 0x1ULL << nbits;}
 bool OnBoard(const int x, const int y) {return x >= 0 && x <= 7 && y >= 0 && y <= 7;}
-uint64_t White() {return m_board->white[0] | m_board->white[1] | m_board->white[2] | m_board->white[3] | m_board->white[4] | m_board->white[5];}
-uint64_t Black() {return m_board->black[0] | m_board->black[1] | m_board->black[2] | m_board->black[3] | m_board->black[4] | m_board->black[5];}
-uint64_t Both() {return White() | Black();}
+inline uint64_t White() {return m_board->white[0] | m_board->white[1] | m_board->white[2] | m_board->white[3] | m_board->white[4] | m_board->white[5];}
+inline uint64_t Black() {return m_board->black[0] | m_board->black[1] | m_board->black[2] | m_board->black[3] | m_board->black[4] | m_board->black[5];}
+inline uint64_t Both() {return White() | Black();}
 
 inline int Lsb(const uint64_t bb) {
 #if defined MODERN
@@ -222,8 +224,6 @@ void AddPerft(const uint64_t hash, const uint64_t nodes, const uint8_t depth) {
 // Board
 
 void BuildBitboards() {
-  memset(m_board->white, 0, sizeof(m_board->white));
-  memset(m_board->black, 0, sizeof(m_board->black));
   for (auto i = 0; i < 64; i++)
     if (     m_board->board[i] > 0) m_board->white[ m_board->board[i] - 1] |= Bit(i);
     else if (m_board->board[i] < 0) m_board->black[-m_board->board[i] - 1] |= Bit(i);
@@ -241,26 +241,7 @@ uint64_t Fill(int from, const int to) {
   return ret;
 }
 
-void FindKings() {
-  for (auto i = 0; i < 64; i++)
-    if (     m_board->board[i] ==  6) m_king_w = i;
-    else if (m_board->board[i] == -6) m_king_b = i;
-}
-
-void FindRank1Rank8Rooks() {
-  for (auto i = m_king_w + 1; i <  8; i++) if (m_board->board[i] == 4) m_rook_w[0] = i;
-  for (auto i = m_king_w - 1; i > -1; i--) if (m_board->board[i] == 4) m_rook_w[1] = i;
-  for (auto i = m_king_b + 1; i < 64;         i++) if (m_board->board[i] == -4) m_rook_b[0] = i;
-  for (auto i = m_king_b - 1; i > 64 - 8 - 1; i--) if (m_board->board[i] == -4) m_rook_b[1] = i;
-}
-
-void FindCastlingRooksAndKings() {
-  m_king_w = m_king_b = 0;
-  FindKings();
-  memset(m_rook_w, 0, sizeof(m_rook_w));
-  memset(m_rook_b, 0, sizeof(m_rook_b));
-  FindRank1Rank8Rooks();
-}
+void FindKings() {for (auto i = 0; i < 64; i++) if (m_board->board[i] ==  6) m_king_w = i; else if (m_board->board[i] == -6) m_king_b = i;}
 
 void BuildCastlingBitboards() {
   m_castle_w[0]       = Fill(m_king_w, 6);
@@ -279,12 +260,7 @@ void BuildCastlingBitboards() {
   }
 }
 
-int Piece(const char piece) {
-  for (auto i = 0; i < 6; i++)
-    if (     piece == "pnbrqk"[i]) return -i - 1;
-    else if (piece == "PNBRQK"[i]) return  i + 1;
-  return 0;
-}
+int Piece(const char piece) {for (auto i = 0; i < 6; i++) {if (piece == "pnbrqk"[i]) return -i - 1; else if (piece == "PNBRQK"[i]) return +i + 1;} return 0;}
 
 void FenBoard(const std::string fen) {
   int pos = 56;
@@ -293,10 +269,10 @@ void FenBoard(const std::string fen) {
 
 void FenKQkq(const std::string fen) {
   for (size_t i = 0; i < fen.length(); i++)
-    if (fen[i] == 'K') {m_board->castle |= 1;}
-    else if (fen[i] == 'Q') {m_board->castle |= 2;}
-    else if (fen[i] == 'k') {m_board->castle |= 4;}
-    else if (fen[i] == 'q') {m_board->castle |= 8;}
+    if (     fen[i] == 'K') {m_rook_w[0] = 7; m_board->castle |= 1;}
+    else if (fen[i] == 'Q') {m_rook_w[1] = 0; m_board->castle |= 2;}
+    else if (fen[i] == 'k') {m_rook_b[0] = 56 + 7; m_board->castle |= 4;}
+    else if (fen[i] == 'q') {m_rook_b[1] = 56 + 0; m_board->castle |= 8;}
     else if (fen[i] >= 'A' && fen[i] <= 'H') {
       const int tmp = fen[i] - 'A';
       if (tmp > m_king_w) {m_rook_w[0] = tmp; m_board->castle |= 1;} else if (tmp < m_king_w) {m_rook_w[1] = tmp; m_board->castle |= 2;}
@@ -317,7 +293,7 @@ void FenGen(const std::string fen) {
   Assert(tokens.size() >= 4, "Error #1: Bad fen");
   FenBoard(tokens[0]);
   m_wtm = tokens[1][0] == 'w';
-  FindCastlingRooksAndKings();
+  FindKings();
   FenKQkq(tokens[2]);
   BuildCastlingBitboards();
   FenEp(tokens[3]);
@@ -329,6 +305,8 @@ void FenReset() {
   m_wtm       = 1;
   m_board->epsq = -1;
   m_king_w = m_king_b = 0;
+  memset(m_board->white, 0, sizeof(m_board->white));
+  memset(m_board->black, 0, sizeof(m_board->black));
   memset(m_rook_w, 0, sizeof(m_rook_w));
   memset(m_rook_b, 0, sizeof(m_rook_b));
 }
@@ -516,14 +494,6 @@ void AddPromotionW(const int from, const int to, const int piece) {
   m_moves_n++;
 }
 
-void AddPromotionStuffW(const int from, const int to) {
-  Board *tmp = m_board;
-  for (int piece = 2; piece <= 5; piece++) {
-    AddPromotionW(from, to, piece);
-    m_board = tmp;
-  }
-}
-
 void AddNormalStuffW(const int from, const int to) {
   const int me = m_board->board[from], eat = m_board->board[to];
   if (me <= 0) return;
@@ -542,12 +512,9 @@ void AddNormalStuffW(const int from, const int to) {
   m_moves_n++;
 }
 
-void AddW(const int from, const int to) {
-  if (m_board->board[from] == 1 && Ycoord(from) == 6)
-    AddPromotionStuffW(from, to);
-  else
-    AddNormalStuffW(from, to);
-}
+void AddPromotionStuffW(const int from, const int to) {Board *tmp = m_board; for (int piece = 2; piece <= 5; piece++) {AddPromotionW(from, to, piece); m_board = tmp;}}
+void AddW(const int from, const int to) {if (m_board->board[from] == 1 && Ycoord(from) == 6) AddPromotionStuffW(from, to); else AddNormalStuffW(from, to);}
+void AddMovesW(const int from, uint64_t moves) {for (; moves; moves = ClearBit(moves)) {AddW(from, Lsb(moves)); m_board = m_board_original;}}
 
 void ModifyPawnStuffB(const int from, const int to) {
   if (to == m_board_original->epsq) {
@@ -593,34 +560,9 @@ void AddPromotionB(const int from, const int to, const int piece) {
   m_moves_n++;
 }
 
-void AddPromotionStuffB(const int from, const int to) {
-  Board *tmp = m_board;
-  for (int piece = 2; piece <= 5; piece++) {
-    AddPromotionB(from, to, -piece);
-    m_board = tmp;
-  }
-}
-
-void AddB(const int from, const int to) {
-  if (m_board->board[from] == -1 && Ycoord(from) == 1)
-    AddPromotionStuffB(from, to);
-  else
-    AddNormalStuffB(from, to);
-}
-
-void AddMovesW(const int from, uint64_t moves) {
-  for (; moves; moves = ClearBit(moves)) {
-    AddW(from, Lsb(moves));
-    m_board = m_board_original;
-  }
-}
-
-void AddMovesB(const int from, uint64_t moves) {
-  for (; moves; moves = ClearBit(moves)) {
-    AddB(from, Lsb(moves));
-    m_board = m_board_original;
-  }
-}
+void AddPromotionStuffB(const int from, const int to) {Board *tmp = m_board; for (int piece = 2; piece <= 5; piece++) {AddPromotionB(from, to, -piece); m_board = tmp;}}
+void AddB(const int from, const int to) {if (m_board->board[from] == -1 && Ycoord(from) == 1) AddPromotionStuffB(from, to); else AddNormalStuffB(from, to);}
+void AddMovesB(const int from, uint64_t moves) {for (; moves; moves = ClearBit(moves)) {AddB(from, Lsb(moves)); m_board = m_board_original;}}
 
 void MgenSetupW() {
   m_white   = White();
@@ -796,19 +738,19 @@ void Bench(const bool fullsuite) {
   int nth = 0;
   const std::vector<std::string> suite = {
     // Normal : https://www.chessprogramming.org/Perft_Results
-    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - -",
-    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - -",
-    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - -",
-    "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - -",
-    "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - -",
-    "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - -",
+    "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0",
+    "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0",
+    "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0",
+    "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0",
+    "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 0",
+    "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0",
     // Chess960 : https://www.chessprogramming.org/Chess960_Perft_Results
-    "bqnb1rkr/pp3ppp/3ppn2/2p5/5P2/P2P4/NPP1P1PP/BQ1BNRKR w HFhf - -",
-    "bnqbnr1r/p1p1ppkp/3p4/1p4p1/P7/3NP2P/1PPP1PP1/BNQB1RKR w HF - -",
-    "nrbq2kr/ppppppb1/5n1p/5Pp1/8/P5P1/1PPPP2P/NRBQNBKR w HBhb - -",
-    "1r1bkqbr/pppp1ppp/2nnp3/8/2P5/N4P2/PP1PP1PP/1RNBKQBR w Hh - -",
-    "rkqnbbnr/ppppppp1/8/7p/3N4/6PP/PPPPPP2/RKQNBB1R w HAa - -",
-    "rbqkr1bn/pp1ppp2/2p1n2p/6p1/8/4BPNP/PPPPP1P1/RBQKRN2 w EAea - -"
+    "bqnb1rkr/pp3ppp/3ppn2/2p5/5P2/P2P4/NPP1P1PP/BQ1BNRKR w HFhf - 0",
+    "bnqbnr1r/p1p1ppkp/3p4/1p4p1/P7/3NP2P/1PPP1PP1/BNQB1RKR w HF - 0",
+    "nrbq2kr/ppppppb1/5n1p/5Pp1/8/P5P1/1PPPP2P/NRBQNBKR w HBhb - 0",
+    "1r1bkqbr/pppp1ppp/2nnp3/8/2P5/N4P2/PP1PP1PP/1RNBKQBR w Hh - 0",
+    "rkqnbbnr/ppppppp1/8/7p/3N4/6PP/PPPPPP2/RKQNBB1R w HAa - 0",
+    "rbqkr1bn/pp1ppp2/2p1n2p/6p1/8/4BPNP/PPPPP1P1/RBQKRN2 w EAea - 0"
   };
   for (auto fen : suite) {
     if (nth++) std::cout << std::endl;
@@ -946,12 +888,8 @@ void Init() {
   std::atexit(HashtableFreeMemory);
 }
 
-// Credit: https://gist.github.com/plasticbox/3708a6cdfbece8cd224487f9ca9794cd
-const std::string getCmdOption(int argc, char *argv[], const std::string& option) {
-  for (int i = 1; i < argc; i++) {const std::string arg = argv[i]; if (arg.find(option) == 0) return arg.substr(option.length());}
-  return "";
-}
-
+// Credits: https://gist.github.com/plasticbox/3708a6cdfbece8cd224487f9ca9794cd
+const std::string getCmdOption(int argc, char *argv[], const std::string& option) {for (int i = 1; i < argc; i++) {const std::string arg = argv[i]; if (arg.find(option) == 0) return arg.substr(option.length());} return "";}
 bool findCmdOption(int argc, char* argv[], const std::string& option) {for (int i = 0; i < argc; i++) {if (option == std::string(argv[i])) return 1;} return 0;}
 
 void PrintHelp() {
@@ -963,18 +901,18 @@ void PrintHelp() {
   std::cout << "-fen=[FEN]    Set fen" << std::endl;
   std::cout << "-perft=[1-99] Perft" << std::endl;
   std::cout << "-bench=[0,1]  Benchmarks [0 = normal, 1 = full]\n" << std::endl;
-  std::cout << "Full source: <https://github.com/SamuraiDangyo/LastEmperor/>" << std::endl;
+  std::cout << "Full source code: <https://github.com/SamuraiDangyo/LastEmperor/>" << std::endl;
 }
 
 void Args(int argc, char **argv) {
   std::string tmp;
-  if ((tmp = getCmdOption(argc, argv, "-fen=")) != "") {Fen(tmp);}
-  if ((tmp = getCmdOption(argc, argv, "-hash=")) != "") {HashtableSetSize(Between<int>(1, std::stoi(tmp), 1024 * 1024));}
-  if ((tmp = getCmdOption(argc, argv, "-perft=")) != "") {PerftRun(Between<int>(1, std::stoi(tmp), 99)); return;}
-  if ((tmp = getCmdOption(argc, argv, "-bench=")) != "") {Bench(Between<int>(0, std::stoi(tmp), 1)); return;}
+  tmp = getCmdOption(argc, argv, "-fen="); if (tmp != "") {Fen(tmp);}
+  tmp = getCmdOption(argc, argv, "-hash="); if (tmp != "") {HashtableSetSize(Between<int>(1, std::stoi(tmp), 1024 * 1024));}
+  tmp = getCmdOption(argc, argv, "-perft="); if (tmp != "") {PerftRun(Between<int>(1, std::stoi(tmp), 99)); return;}
+  tmp = getCmdOption(argc, argv, "-bench="); if (tmp != "") {Bench(Between<int>(0, std::stoi(tmp), 1)); return;}
   if (findCmdOption(argc, argv, "--version")) {std::cout << k_name << std::endl; return;}
-  if (argc >= 2 && !findCmdOption(argc, argv, "--help")) {std::cout << "Invalid command: '" << std::string(argv[1]) << "'" << std::endl; return;}
-  PrintHelp();
+  if (findCmdOption(argc, argv, "--help")) {PrintHelp(); return;}
+  std::cout << "See: --help" << std::endl;
 }}
 
 // "War demands sacrifice of the people. It gives only suffering in return." -- Frederic Clemson Howe
