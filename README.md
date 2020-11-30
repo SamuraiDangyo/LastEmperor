@@ -1,19 +1,12 @@
-![LastEmperor](https://github.com/SamuraiDangyo/LastEmperor/blob/master/logo.jpg)
-
 # LastEmperor
-A Chess960 program.
-Derived from Sapeli 1.93.
-Very lightweight, only 833 sloc.
+Chess960 perft program written in C++14.
 
-## How To Use
+## Build
 `make` should build a fast binary.
-If not then remove `-DPEXT` and `-DMODERN` flags until it works.
+If not then remove the `-DPEXT` flag and try again.
 
-## Example: Kiwipete to depth 6
-```
-lastemperor -hash=1024 -fen="r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -" -perft=6
-```
+## Example: Kiwipete to depth 6 (+ 1024 MB hash)
+`lastemperor -perft "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq -" 6 1024`
 
-## More
-- Credits logo
-- GPLv3
+## License
+GPLv3
